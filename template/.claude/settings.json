@@ -1,0 +1,27 @@
+{
+  "attribution": { "commit": "", "pr": "" },
+  "extraKnownMarketplaces": {
+    "superpowers-dev": { "source": { "source": "github", "repo": "obra/superpowers" } },
+    "ponytail": { "source": { "source": "github", "repo": "DietrichGebert/ponytail" } },
+    "caveman": { "source": { "source": "github", "repo": "JuliusBrussee/caveman" } }
+  },
+  "enabledPlugins": {
+    "superpowers@superpowers-dev": true,
+    "ponytail@ponytail": true,
+    "caveman@caveman": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-claude-md.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

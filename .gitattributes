@@ -1,0 +1,3 @@
+* text=auto
+# Keep Unix line endings for shell scripts so they run on Mac and Linux.
+*.sh text eol=lf
