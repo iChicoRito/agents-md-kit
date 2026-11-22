@@ -4,8 +4,8 @@
 - For general work, use the primary skills: Superpowers, Ponytail, and Caveman.
 - For frontend or UI/UX work, use the design skills below. Install others only if they fit the task.
 - Skills are installed globally, not copied into this repo. `.claude/skills/` holds only skills made for this project.
-- `superpowers:*`, `ponytail:*` and Caveman come from plugins listed in `.claude/settings.json`. Claude Code offers to install them when the project opens.
-- `impeccable`, `ui-ux-pro-max`, `design-taste-frontend` and `unslop-ui` must be installed by hand. See `docs/guides/setup.md`.
+- Plugins listed in `.claude/settings.json` (Superpowers, Ponytail, Caveman, mattpocock-skills, ux-ui-agent-skills, unslop-ui): Claude Code offers to install them when the project opens.
+- The Caveman skills (`caveman`, `caveman-commit`, `caveman-review` and more) and the design skills (`impeccable`, `ui-ux-pro-max`, `design-taste-frontend`) must be installed by hand. See `docs/guides/setup.md`.
 - Agents that do not load skills automatically (e.g. Codex): find the skill's `SKILL.md` in `~/.claude/skills/` or `~/.claude/plugins/` and follow it.
 
 ## Which skill for which task
@@ -22,6 +22,11 @@
 | Feature work that needs an isolated branch | `superpowers:using-git-worktrees` |
 | Write tests before the code (features and bug fixes) | `superpowers:test-driven-development` |
 | Any coding task: smallest change that fully solves it | `ponytail:ponytail` |
+| Throwaway prototype to test an idea or a UI | `mattpocock-skills:prototype` |
+| Stress-test a plan with hard questions | `mattpocock-skills:grilling` |
+| Research a topic from trusted sources into a Markdown file | `mattpocock-skills:research` |
+| Project words, glossary, decision records | `mattpocock-skills:domain-modeling` |
+| Design module boundaries, make code easier to test | `mattpocock-skills:codebase-design` |
 
 ### Bugs and checking
 
@@ -49,7 +54,8 @@
 | Design, redesign, critique, audit, or polish any UI | `impeccable` |
 | UI/UX choices: style, color, fonts, layout, accessibility, charts | `ui-ux-pro-max` |
 | Websites and landing pages that must not look generic or AI-made | `design-taste-frontend` |
-| Remove AI-looking copy and visual clutter from a UI (plugin `unslop-ui`, not enabled; needs `pstack`) | `unslop-ui` |
+| Remove AI-looking copy and visual clutter from a UI (user runs it; needs `pstack`) | `/unslop-ui` |
+| Harsh design review of a finished screen, after checks pass | agent `ux-ui-agent-skills:design-critic` |
 
 ### Writing and communication
 
@@ -59,6 +65,8 @@
 | Write a commit message (only when the user asks to commit) | `caveman-commit` |
 | Shrink a long memory or instruction file | `caveman-compress` |
 | Create or edit a skill | `superpowers:writing-skills` |
+| Write or edit `CLAUDE.md`, `AGENTS.md`, or rule files | `mattpocock-skills:writing-for-agents` |
+| Write a pull request description | `mattpocock-skills:pr` |
 
 ### Help and reference
 

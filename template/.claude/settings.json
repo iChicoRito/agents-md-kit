@@ -3,12 +3,18 @@
   "extraKnownMarketplaces": {
     "superpowers-dev": { "source": { "source": "github", "repo": "obra/superpowers" } },
     "ponytail": { "source": { "source": "github", "repo": "DietrichGebert/ponytail" } },
-    "caveman": { "source": { "source": "github", "repo": "JuliusBrussee/caveman" } }
+    "caveman": { "source": { "source": "github", "repo": "JuliusBrussee/caveman" } },
+    "mattpocock": { "source": { "source": "github", "repo": "mattpocock/skills" } },
+    "ux-ui-agent-skills": { "source": { "source": "github", "repo": "plugin87/ux-ui-agent-skills" } },
+    "unslop-ui": { "source": { "source": "github", "repo": "felipebasurto/unslop-ui" } }
   },
   "enabledPlugins": {
     "superpowers@superpowers-dev": true,
     "ponytail@ponytail": true,
-    "caveman@caveman": true
+    "caveman@caveman": true,
+    "mattpocock-skills@mattpocock": true,
+    "ux-ui-agent-skills@ux-ui-agent-skills": true,
+    "unslop-ui@unslop-ui": true
   },
   "hooks": {
     "PostToolUse": [

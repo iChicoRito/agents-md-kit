@@ -30,7 +30,7 @@ These stay on your computer and are never shared.
 **`.claude/settings.json`: Claude Code settings**
 It does three things:
 1. Stops Claude from adding its name to your commits.
-2. Lists the Superpowers, Ponytail and Caveman plugins. Anyone who opens the project in Claude Code is offered an install.
+2. Lists six plugins: Superpowers, Ponytail, Caveman, mattpocock-skills, ux-ui-agent-skills and unslop-ui. Anyone who opens the project in Claude Code is offered an install.
 3. Turns on the line checker below.
 
 **`.claude/hooks/check-claude-md.js`: the line checker**
@@ -84,7 +84,7 @@ Most of these start as forms with `[PLACEHOLDERS]` to fill in.
 
 1. **Create your project folder** and open a terminal in it.
 2. **Run the install command** (see [README](README.md#install)).
-3. **Install the skills.** Open the project in Claude Code and accept the plugin install offer. Then run the three `npx skills add` commands in `docs/guides/setup.md` for the design skills.
+3. **Install the skills.** Open the project in Claude Code and accept the plugin install offer. Then run the four `npx skills add` commands in `docs/guides/setup.md` for the Caveman skills and the design skills.
 4. **Fill in the basics** in `CLAUDE.md`: project description, folders, commands. If you have no code yet, fill these in as you build.
 5. **Fill in `docs/` as you build.** When you design the database, write `docs/database/schema.md`. When you make a big decision, write a decision file.
 6. **Check it loads.** In Claude Code, type `/memory` (instruction files) and `/skills` (skills).

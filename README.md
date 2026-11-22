@@ -62,7 +62,7 @@ docs/              architecture, API, database, guides, decisions
 
 - [Claude Code](https://claude.com/claude-code) and/or Codex.
 - Node.js, for the line-limit hook and the design skills.
-- Skills: Superpowers, Ponytail and Caveman install as plugins when you open the project in Claude Code. The design skills are installed by hand. See `docs/guides/setup.md` after install.
+- Skills: six plugins (Superpowers, Ponytail, Caveman, mattpocock-skills, ux-ui-agent-skills, unslop-ui) install when you open the project in Claude Code. The Caveman skills and design skills are installed by hand with `npx skills add`. See `docs/guides/setup.md` after install.
 
 ## After install
 
