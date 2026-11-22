@@ -8,6 +8,8 @@ A small, scalable instruction setup for AI coding agents (Claude Code and Codex)
 - `docs/` holds architecture, API, database and guides. Agents open these only when a task needs them.
 - A hook warns Claude Code when `CLAUDE.md` or `AGENTS.md` goes over 200 lines.
 
+New here? Read the **[guide](GUIDE.md)**: what every file does, and how to use the kit on a new or existing project.
+
 ## Install
 
 Open a terminal **in your project folder** and run one command.
@@ -67,6 +69,8 @@ docs/              architecture, API, database, guides, decisions
 1. Fill the `[PLACEHOLDERS]` in `CLAUDE.md` and `docs/`. You can ask Claude:
    > Fill in the [PLACEHOLDERS] in CLAUDE.md by reading the codebase. Keep the sections and stay under 200 lines. Put architecture, API and database details in docs/.
 2. In Claude Code, run `/memory` and `/skills` to check what loads.
+
+Using it on an existing project? See [GUIDE.md](GUIDE.md#use-it-on-an-existing-project) for how to merge.
 
 ## Optional: short command
 
