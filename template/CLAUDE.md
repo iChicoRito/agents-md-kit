@@ -35,6 +35,7 @@ When code changes behavior, update the matching doc in the same change.
 [FOLDER 1]/        # [FOLDER 1 DESCRIPTION]
 [FOLDER 2]/        # [FOLDER 2 DESCRIPTION]
 .claude/rules/     # Rules all agents follow (one topic per file)
+.claude/skills/    # Project-only skills for Claude Code only
 .agents/skills/    # Project-only skills, shared by all agents
 docs/              # Architecture, API, database, guides
 ```
@@ -64,7 +65,7 @@ This file is an index, not a manual. Keep only what agents need in every session
 |---|---|
 | Project summary, structure, main commands | This file |
 | Rules (how to work) | `.claude/rules/<topic>.md`, listed above |
-| Skills (reusable workflows) | Global; which to use: `.claude/rules/skills-and-plugins.md`. Project-only skills: `.agents/skills/<name>/SKILL.md`, listed in that rule |
+| Skills (reusable workflows) | Global; which to use: `.claude/rules/skills-and-plugins.md`. Project-only skills: `.agents/skills/<name>/` (all agents) or `.claude/skills/<name>/` (Claude only) |
 | Notes for one folder only | `<folder>/CLAUDE.md`, plus `<folder>/AGENTS.md` pointing to it |
 | Architecture, API, database, guides, decisions | `docs/`, listed in `docs/README.md` |
 | Claude Code hooks and settings | `.claude/settings.json` |

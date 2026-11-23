@@ -48,12 +48,15 @@ Six short rule files. Claude Code reads all of them every session. `CLAUDE.md` l
 | `check-work.md` | Check the work before finishing. Say clearly what was not checked. |
 | `plain-language.md` | Use simple words and short explanations. |
 
+**`.claude/skills/`: project skills for Claude Code only**
+It starts empty, with only a `.gitkeep` (an empty file that makes git keep the folder). Claude Code loads skills here automatically. Other agents do not see them. Use it for a skill only Claude needs.
+
 ### The `.agents/` folder: project skills for every agent
 
 **`.agents/skills/`: skills made for this project**
 It starts empty. Its only file is `.gitkeep`, an empty file that makes git keep the folder. The skills you use (Superpowers, design skills and more) are installed on your computer, not here. Put a skill here only if it is specific to this project, for example "how to deploy this app". Each skill gets its own folder with a `SKILL.md`.
 
-`.agents/` is a shared folder name that Codex and other agents use. Writing the skill here means you write it once for every agent. When you add one, also add a row under "Project skills" in `.claude/rules/skills-and-plugins.md`, so Claude Code knows it exists and when to use it.
+`.agents/` is a shared folder name that Codex and other agents use. Writing the skill here means you write it once for every agent. This is the default place for a project skill. When you add one, also add a row under "Project skills" in `.claude/rules/skills-and-plugins.md`, so Claude Code knows it exists and when to use it.
 
 ### The `docs/` folder: knowledge about your system
 

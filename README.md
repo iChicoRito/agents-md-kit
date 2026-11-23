@@ -52,6 +52,7 @@ AGENTS.md          pointer for Codex and other agents
 .gitignore         keeps personal Claude files out of git
 .claude/
   rules/           how agents should work
+  skills/          skills made only for this project (Claude Code only)
   hooks/           line-limit check
   settings.json    plugins, hook, no AI author lines on commits
 .agents/
