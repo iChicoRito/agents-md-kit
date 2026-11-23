@@ -9,6 +9,12 @@ All notable changes to agents-md-kit. Versions follow [semantic versioning](http
 3. Commit, push, wait for the tests to pass.
 4. Tag and publish: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`.
 
+## 1.1.0 - 2026-11-23
+
+- `--dry-run` / `-DryRun`: shows what would be added, merged or skipped, and changes nothing.
+- `--add-command` / `-AddCommand`: adds the short command `agents-md-kit` to your PowerShell profile, `~/.zshrc` or `~/.bashrc`. Running it again adds nothing.
+- Tests: GitHub Actions now uses `actions/checkout@v5`.
+
 ## 1.0.1 - 2026-11-23
 
 - The installer no longer adds a `.agents-md-kit` file to projects. The version stays on GitHub (`VERSION`, releases) and in the installer's welcome box. `--update` works out the variant from the `.claude/` and `.agents/` folders. An old `.agents-md-kit` file from 1.0.0 can be deleted.

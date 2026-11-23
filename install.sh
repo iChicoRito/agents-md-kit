@@ -15,7 +15,7 @@
 # Exception: an existing .gitignore is kept and only missing lines are added.
 set -euo pipefail
 
-kit_version="1.0.1"   # keep equal to the VERSION file (the tests check this)
+kit_version="1.1.0"   # keep equal to the VERSION file (the tests check this)
 repo="https://github.com/iChicoRito/agents-md-kit"
 archive="$repo/archive/refs/heads/main.tar.gz"
 
@@ -45,7 +45,7 @@ fi
 say()  { printf '%s\n' "$*"; }
 fail() { printf '\n  %s%s Error:%s %s\n\n' "$RD$B" "$DOT" "$N" "$*" >&2; exit 1; }
 # done_line "<label>" "<value>" ["<note>"]: one finished step, like Claude Code's tool lines
-done_line() { printf '  %s%s%s %-9s %s%s%s%s\n' "$G" "$DOT" "$N" "$1" "$B" "$2" "$N" "${3:+ $D$SEP $3$N}"; }
+done_line() { printf '  %s%s%s %-10s %s%s%s%s\n' "$G" "$DOT" "$N" "$1" "$B" "$2" "$N" "${3:+ $D$SEP $3$N}"; }
 files() { if [ "$1" = 1 ]; then echo "1 file"; else echo "$1 files"; fi; }
 rule() { local s="" i; for ((i = 0; i < $1; i++)); do s+="$H"; done; printf '%s' "$s"; }
 
@@ -73,13 +73,18 @@ usage() {
     --version 1.0.0       install that released version instead of the latest
                           (list: $repo/releases)
 
+    --dry-run             show what would be added, merged or skipped; change nothing
+
+    --add-command         add the short command "agents-md-kit" to your shell
+                          (~/.zshrc for zsh, otherwise ~/.bashrc), then stop
+
   ${D}Options you leave out are asked. Target folder: current folder if not given.${N}
 
 EOF
 }
 
 # ---------- arguments ----------
-choice=""; project=""; prompt=""; update=""; want_version=""; target="$PWD"
+choice=""; project=""; prompt=""; update=""; want_version=""; dry=""; add_cmd=""; target="$PWD"
 need_value() { [ "$2" -ge 2 ] || fail "$1 needs a value (see --help)"; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -93,10 +98,28 @@ while [ $# -gt 0 ]; do
     --update) update=1; shift ;;
     --version) need_value "$1" $#; want_version="$2"; shift 2 ;;
     --version=*) want_version="${1#--version=}"; shift ;;
+    --dry-run) dry=1; shift ;;
+    --add-command) add_cmd=1; shift ;;
     -*) fail "Unknown option: $1 (see --help)" ;;
     *) target="$1"; shift ;;
   esac
 done
+
+# ---------- --add-command: put the short command in the shell's startup file, then stop ----------
+if [ -n "$add_cmd" ]; then
+  case "${SHELL:-}" in */zsh) rc="$HOME/.zshrc" ;; *) rc="$HOME/.bashrc" ;; esac
+  line='agents-md-kit() { curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.sh | bash -s -- "$@"; }'
+  say ""
+  if [ -f "$rc" ] && grep -q '^agents-md-kit()' "$rc"; then
+    done_line "Command" "agents-md-kit" "already in $rc"
+  else
+    [ -n "$dry" ] || printf '\n# agents-md-kit installer (added by --add-command)\n%s\n' "$line" >> "$rc"
+    done_line "Command" "agents-md-kit" "$([ -n "$dry" ] && echo "would be added to" || echo "added to") $rc"
+  fi
+  say "    ${D}Open a new terminal, then type ${N}${B}agents-md-kit${N}${D} in any project folder.${N}"
+  say ""
+  exit 0
+fi
 [ -d "$target" ] || fail "Target folder not found: $target"
 target="$(cd "$target" && pwd)"
 case "$choice" in ""|claude|agents|both) ;; *) fail "Unknown --for value: $choice (use claude, agents or both)" ;; esac
@@ -246,6 +269,7 @@ say ""
 show_target="$target"; [ -n "${HOME:-}" ] && case "$target" in "$HOME"*) show_target="~${target#"$HOME"}" ;; esac
 say "  ${D}Folder: $show_target${N}"
 [ -n "$update" ] && say "  ${A}Update mode:${N} ${D}missing files are added; newer kit files are saved as *.kit-new${N}"
+[ -n "$dry" ] && say "  ${A}Dry run:${N} ${D}nothing will be changed, you only see what would happen${N}"
 [ -n "$menus" ] && say "  ${D}Pick with arrow keys. Nothing is overwritten.${N}" || say "  ${D}Nothing is overwritten.${N}"
 [ -n "$can_ask" ] && [ -z "$menus" ] || say ""   # typed questions bring their own blank line
 
@@ -350,7 +374,7 @@ for ((k = 0; k < ${#todo[@]}; k++)); do
       case "$line" in ''|'#'*) continue ;; esac
       tr -d '\r' < "$dest" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -qxF -- "$line" || gi_added+=("$line")
     done < "$f"
-    if [ ${#gi_added[@]} -gt 0 ]; then
+    if [ ${#gi_added[@]} -gt 0 ] && [ -z "$dry" ]; then
       nl=$'\n'; [ "$(tr -cd '\r' < "$dest" | wc -c)" -gt 0 ] && nl=$'\r\n'
       { [ -s "$dest" ] && [ "$(tail -c1 "$dest")" != "" ] && printf '%s' "$nl"
         printf '%s# Added by agents-md-kit%s' "$nl" "$nl"
@@ -362,19 +386,28 @@ for ((k = 0; k < ${#todo[@]}; k++)); do
     # Same content (line endings ignored): nothing to do. Different: keep yours;
     # in update mode also save the kit's version beside it as .kit-new.
     if [ -f "$dest" ] && [ "$(tr -d '\r' < "$f")" = "$(tr -d '\r' < "$dest")" ]; then same=$((same + 1))
-    elif [ -n "$update" ] && [ -f "$dest" ]; then cp "$f" "$dest.kit-new"; newer+=("$rel")
+    elif [ -n "$update" ] && [ -f "$dest" ]; then
+      [ -n "$dry" ] || cp "$f" "$dest.kit-new"
+      newer+=("$rel")
     else skipped+=("$rel"); fi
     continue
   fi
-  mkdir -p "$(dirname "$dest")"
-  cp "$f" "$dest"
+  if [ -z "$dry" ]; then
+    mkdir -p "$(dirname "$dest")"
+    cp "$f" "$dest"
+  fi
   copied=$((copied + 1)); added+=("$rel")
 done
 progress "${#todo[@]}" "${#todo[@]}"
 [ -n "$ansi" ] && printf '\r\033[2K\033[?25h'
 
 # ---------- result: a small tree of what changed ----------
-done_line "Copied" "$(files "$copied")"
+if [ -n "$dry" ]; then
+  done_line "Dry run" "nothing was changed" "this is what would happen"
+  done_line "Would copy" "$(files "$copied")"
+else
+  done_line "Copied" "$(files "$copied")"
+fi
 rows=()   # each row: "<text>" already colored
 if [ $copied -gt 0 ]; then
   # Group added files by top-level entry: folders show a count, files show their name.
@@ -385,7 +418,7 @@ if [ $copied -gt 0 ]; then
 fi
 if [ -n "$gi_status" ]; then
   if [ ${#gi_added[@]} -gt 0 ]; then
-    rows+=("${G}~${N} .gitignore   ${D}kept, added: $(IFS=,; echo "${gi_added[*]}" | sed 's/,/, /g')${N}")
+    rows+=("${G}~${N} .gitignore   ${D}kept, $([ -n "$dry" ] && echo "would add" || echo "added"): $(IFS=,; echo "${gi_added[*]}" | sed 's/,/, /g')${N}")
   else
     rows+=("${D}= .gitignore   kept, nothing to add${N}")
   fi
@@ -394,7 +427,7 @@ for s in "${skipped[@]+"${skipped[@]}"}"; do
   rows+=("${Y}!${N} $(printf '%-12s' "$s") ${Y}already existed, left untouched${N}")
 done
 for s in "${newer[@]+"${newer[@]}"}"; do
-  rows+=("${A}${UP}${N} $(printf '%-12s' "$s") ${A}newer kit version saved as $s.kit-new${N}")
+  rows+=("${A}${UP}${N} $(printf '%-12s' "$s") ${A}newer kit version $([ -n "$dry" ] && echo "would be saved" || echo "saved") as $s.kit-new${N}")
 done
 [ "$same" -gt 0 ] && rows+=("${D}= $(files "$same") already up to date${N}")
 for ((i = 0; i < ${#rows[@]}; i++)); do
@@ -410,6 +443,12 @@ prompt_skipped=""; for s in "${skipped[@]+"${skipped[@]}"}"; do [ "$s" = "PROMPT
 
 # ---------- next steps ----------
 say ""
+if [ -n "$dry" ]; then
+  say "  ${A}${STAR}${N} ${B}Dry run finished.${N} Nothing was changed."
+  say "    Run the same command without ${B}--dry-run${N} to do it for real."
+  say ""
+  exit 0
+fi
 say "  ${A}${STAR}${N} ${B}Next steps${N}"
 say ""
 if [ -n "$update" ]; then

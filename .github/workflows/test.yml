@@ -10,7 +10,7 @@ jobs:
     name: Check scripts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: ShellCheck (Bash)
         run: shellcheck -S warning install.sh tests/test.sh
       - name: PSScriptAnalyzer (PowerShell)
@@ -29,7 +29,7 @@ jobs:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install tests
         shell: bash
         run: bash tests/test.sh
@@ -38,7 +38,7 @@ jobs:
     name: PowerShell on Windows
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install tests (Windows PowerShell 5.1)
         shell: powershell
         run: ./tests/test.ps1

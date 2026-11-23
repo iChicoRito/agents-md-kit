@@ -70,6 +70,18 @@ try {
         Test-That "update: .kit-new is the kit version" { (Get-FileHash "$d\$main.kit-new").Hash -eq (Get-FileHash (Join-Path $kit "template\$v\$main")).Hash }
         Test-That "update: no PROMPT.md added" { -not (Test-Path "$d\PROMPT.md") }
     }
+    "== dry run and add-command"
+    $d = Join-Path $work "dry"; New-Item -ItemType Directory $d | Out-Null
+    Set-Content "$d\CLAUDE.md" "mine"; Set-Content "$d\.gitignore" "node_modules"
+    $dryBefore = Get-Snapshot $d
+    Test-That "dry run: runs without error" { Invoke-Install @($d, "-For", "both", "-DryRun") }
+    Test-That "dry run: no file changed" { (Get-Snapshot $d) -eq $dryBefore }
+    Test-That "dry run: says what would happen" { $script:log -match 'Would copy' }
+    $pp = Join-Path $work "profile\Microsoft.PowerShell_profile.ps1"
+    Test-That "add-command: runs without error" { Invoke-Install @("-AddCommand", "-ProfilePath", $pp) }
+    Test-That "add-command: adds to the profile" { (Get-Content $pp) -match '^function agents-md-kit ' }
+    Test-That "add-command: second run adds nothing" { (Invoke-Install @("-AddCommand", "-ProfilePath", $pp)) -and @((Get-Content $pp) -match '^function agents-md-kit ').Count -eq 1 }
+
     "== errors"
     Test-That "unknown -For value fails" { -not (Invoke-Install @($work, "-For", "nope")) }
     Test-That "missing folder fails" { -not (Invoke-Install @((Join-Path $work "does-not-exist"), "-For", "both")) }

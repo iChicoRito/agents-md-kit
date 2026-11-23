@@ -76,6 +76,7 @@ Prefer typed answers? Set `AGENTS_MD_KIT_UI=plain` before running. `NO_COLOR=1` 
 - It never overwrites a file. Files that already exist are skipped and listed, so you can merge them by hand.
 - It keeps an existing `.gitignore` and adds only the missing lines at the end.
 - Running it again changes nothing.
+- Not sure? Add `--dry-run` (Bash) or `-DryRun` (PowerShell) first. It shows what would be added, merged or skipped, and changes nothing.
 
 **Update a project that already has the kit**
 
@@ -189,6 +190,8 @@ Bash (Mac, Linux, Git Bash) uses `--option`. PowerShell uses `-Option`. **Option
 | Update a project that has the kit | `--update` | `-Update` |
 | Install a released version | `--version 1.0.1` | `-Version 1.0.1` |
 | Install into another folder | `... "path/to/project"` | `... "C:\path\to\project"` |
+| Preview only, change nothing | `--dry-run` | `-DryRun` |
+| Add the short command `agents-md-kit` | `--add-command` | `-AddCommand` |
 | Show help | `--help` | `-Help` |
 | Typed answers instead of arrow keys | `AGENTS_MD_KIT_UI=plain` before `bash` | `$env:AGENTS_MD_KIT_UI = "plain"` first |
 | No colors | `NO_COLOR=1` before `bash` | `$env:NO_COLOR = "1"` first |
@@ -209,7 +212,19 @@ With PowerShell, options go after the last `)`:
 
 Add an `agents-md-kit` command so you can type one word in any project. Options pass through, for example `agents-md-kit --for claude`.
 
-PowerShell (run `notepad $PROFILE` and add):
+**Easiest:** let the installer add it for you. Run once, then open a new terminal:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.ps1))) -AddCommand
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.sh | bash -s -- --add-command
+```
+
+PowerShell adds it to your profile (`$PROFILE`). Bash adds it to `~/.zshrc` when your shell is zsh, otherwise to `~/.bashrc`. Running it again adds nothing.
+
+**By hand:** PowerShell (run `notepad $PROFILE` and add):
 
 ```powershell
 function agents-md-kit { & ([scriptblock]::Create((irm https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.ps1))) @args }
@@ -232,6 +247,7 @@ Open a new terminal after adding it, then:
 | Update a project that has the kit | `agents-md-kit --update` | `agents-md-kit -Update` |
 | Install a released version | `agents-md-kit --version 1.0.1` | `agents-md-kit -Version 1.0.1` |
 | Install into another folder | `agents-md-kit --for both "path/to/project"` | `agents-md-kit -For both "C:\path\to\project"` |
+| Preview only, change nothing | `agents-md-kit --dry-run` | `agents-md-kit -DryRun` |
 | Show help | `agents-md-kit --help` | `agents-md-kit -Help` |
 
 ## License

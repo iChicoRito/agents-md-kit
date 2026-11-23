@@ -67,6 +67,22 @@ for v in claude agents both; do
   check "update: no PROMPT.md added" "[ ! -e '$d/PROMPT.md' ]"
 done
 
+# Dry run changes nothing
+echo "== dry run and add-command"
+d="$work/dry"; mkdir -p "$d"; echo "mine" > "$d/CLAUDE.md"; printf 'node_modules\n' > "$d/.gitignore"
+# shellcheck disable=SC2034  # used inside the check string below
+dry_before="$(snapshot "$d")"
+check "dry run: runs without error" "install --dry-run --for both '$d'"
+check "dry run: no file changed" "[ \"\$(snapshot '$d')\" = \"\$dry_before\" ]"
+check "dry run: says what would happen" "grep -q 'Would copy' '$work/last.log'"
+
+# --add-command writes the short command once
+h="$work/home"; mkdir -p "$h"
+check "add-command: runs without error" "HOME='$h' SHELL=/bin/bash install --add-command"
+check "add-command: adds to ~/.bashrc" "grep -q '^agents-md-kit()' '$h/.bashrc'"
+check "add-command: second run adds nothing" "HOME='$h' SHELL=/bin/bash install --add-command && [ \"\$(grep -c '^agents-md-kit()' '$h/.bashrc')\" = 1 ]"
+check "add-command: zsh uses ~/.zshrc" "HOME='$h' SHELL=/bin/zsh install --add-command && grep -q '^agents-md-kit()' '$h/.zshrc'"
+
 # Bad input is refused
 echo "== errors"
 check "unknown --for value fails" "! install --for nope '$work'"

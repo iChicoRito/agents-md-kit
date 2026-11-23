@@ -13,10 +13,10 @@
 # so the Unicode symbols are built from code points.
 #   -Update                    project already has the kit: add missing files, and save the
 #                              newer kit version of changed files as <file>.kit-new
-param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$Help)
+param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$DryRun, [switch]$AddCommand, [string]$ProfilePath = $PROFILE, [switch]$Help)
 $ErrorActionPreference = 'Stop'
 
-$kitVersion = "1.0.1"   # keep equal to the VERSION file (the tests check this)
+$kitVersion = "1.1.0"   # keep equal to the VERSION file (the tests check this)
 $repo = "https://github.com/iChicoRito/agents-md-kit"
 $archive = "$repo/archive/refs/heads/main.zip"
 
@@ -51,7 +51,7 @@ function Write-Part([string]$Text, [string]$Style = "", [switch]$End) {
 }
 # One finished step, like Claude Code's tool lines: "* Label   value - note"
 function Write-Done([string]$Label, [string]$Value, [string]$Note = "") {
-    Write-Part "  $DOT " Green; Write-Part $Label.PadRight(10); Write-Part $Value Bold
+    Write-Part "  $DOT " Green; Write-Part $Label.PadRight(11); Write-Part $Value Bold
     if ($Note) { Write-Part " $SEP $Note" Dim }
     Write-Host ""
 }
@@ -93,7 +93,32 @@ if ($Help) {
     Write-Host "    -Version 1.0.0       install that released version instead of the latest"
     Write-Host "                         (list: $repo/releases)"
     Write-Host ""
+    Write-Host "    -DryRun              show what would be added, merged or skipped; change nothing"
+    Write-Host ""
+    Write-Host "    -AddCommand          add the short command ""agents-md-kit"" to your PowerShell"
+    Write-Host "                         profile (`$PROFILE), then stop"
+    Write-Host ""
     Write-Part "  Options you leave out are asked. Target folder: current folder if not given." Dim -End
+    Write-Host ""
+    return
+}
+
+# ---------- -AddCommand: put the short command in the PowerShell profile, then stop ----------
+if ($AddCommand) {
+    $line = 'function agents-md-kit { & ([scriptblock]::Create((irm https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.ps1))) @args }'
+    Write-Host ""
+    $hasIt = (Test-Path $ProfilePath) -and (Select-String -LiteralPath $ProfilePath -Pattern '^function agents-md-kit ' -Quiet)
+    if ($hasIt) {
+        Write-Done "Command" "agents-md-kit" "already in $ProfilePath"
+    } else {
+        if (-not $DryRun) {
+            $dir = Split-Path $ProfilePath
+            if ($dir -and -not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+            Add-Content -LiteralPath $ProfilePath -Value @("", "# agents-md-kit installer (added by -AddCommand)", $line) -Encoding UTF8
+        }
+        Write-Done "Command" "agents-md-kit" "$(if ($DryRun) { 'would be added to' } else { 'added to' }) $ProfilePath"
+    }
+    Write-Part "    Open a new PowerShell window, then type " Dim; Write-Part "agents-md-kit" Bold; Write-Part " in any project folder." Dim -End
     Write-Host ""
     return
 }
@@ -194,6 +219,7 @@ Write-Part ("  $BL" + ($H * $w) + $BR) Accent -End
 Write-Host ""
 Write-Part "  Folder: $showTarget" Dim -End
 if ($Update) { Write-Part "  Update mode: " Accent; Write-Part "missing files are added; newer kit files are saved as *.kit-new" Dim -End }
+if ($DryRun) { Write-Part "  Dry run: " Accent; Write-Part "nothing will be changed, you only see what would happen" Dim -End }
 if ($menus) { Write-Part "  Pick with arrow keys. Nothing is overwritten." Dim -End } else { Write-Part "  Nothing is overwritten." Dim -End }
 if (-not ($canAsk -and -not $menus)) { Write-Host "" }   # typed questions bring their own blank line
 
@@ -300,7 +326,7 @@ try {
             $have = @(Get-Content -LiteralPath $dest | ForEach-Object { $_.Trim() })
             $missing = @(Get-Content -LiteralPath $file.FullName | ForEach-Object { $_.Trim() } |
                 Where-Object { $_ -and -not $_.StartsWith('#') -and $have -notcontains $_ })
-            if ($missing.Count) {
+            if ($missing.Count -and -not $DryRun) {
                 $raw = [IO.File]::ReadAllText($dest)
                 $nl = if ($raw -match "`r`n") { "`r`n" } else { "`n" }
                 $text = $(if ($raw -and -not $raw.EndsWith("`n")) { $nl } else { '' }) +
@@ -318,30 +344,38 @@ try {
                 $isSame = ([IO.File]::ReadAllText($file.FullName) -replace "`r", "") -ceq ([IO.File]::ReadAllText($dest) -replace "`r", "")
             }
             if ($isSame) { $same++ }
-            elseif ($Update -and (Test-Path $dest -PathType Leaf)) { Copy-Item -LiteralPath $file.FullName -Destination "$dest.kit-new" -Force; $newer += $rel }
+            elseif ($Update -and (Test-Path $dest -PathType Leaf)) {
+                if (-not $DryRun) { Copy-Item -LiteralPath $file.FullName -Destination "$dest.kit-new" -Force }
+                $newer += $rel
+            }
             else { $skipped += $rel }
             continue
         }
-        New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
-        Copy-Item -LiteralPath $file.FullName -Destination $dest
+        if (-not $DryRun) {
+            New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
+            Copy-Item -LiteralPath $file.FullName -Destination $dest
+        }
         $copied++; $added += $rel
     }
     Write-Progress-Bar $todo.Count $todo.Count
     if ($vt) { Write-Host "`r$E[2K" -NoNewline; try { [Console]::CursorVisible = $true } catch {} }
 
     # ---------- result: a small tree of what changed ----------
-    Write-Done "Copied" (Format-Files $copied)
+    if ($DryRun) {
+        Write-Done "Dry run" "nothing was changed" "this is what would happen"
+        Write-Done "Would copy" (Format-Files $copied)
+    } else { Write-Done "Copied" (Format-Files $copied) }
     $rows = @()   # each row: list of @(text, style) parts
     $added | Group-Object { $p = $_ -split '[\\/]'; if ($p.Count -gt 1) { $p[0] + "/" } else { $p[0] } } | Sort-Object Name | ForEach-Object {
         if ($_.Name.EndsWith("/")) { $rows += , @(@("+ ", "Green"), @($_.Name.PadRight(12) + " ", ""), @((Format-Files $_.Count), "Dim")) }
         else { $rows += , @(@("+ ", "Green"), @($_.Name, "")) }
     }
     if ($null -ne $gitignoreAdded) {
-        if ($gitignoreAdded.Count) { $rows += , @(@("~ ", "Green"), @(".gitignore".PadRight(12) + " ", ""), @("kept, added: $($gitignoreAdded -join ', ')", "Dim")) }
+        if ($gitignoreAdded.Count) { $rows += , @(@("~ ", "Green"), @(".gitignore".PadRight(12) + " ", ""), @("kept, $(if ($DryRun) { 'would add' } else { 'added' }): $($gitignoreAdded -join ', ')", "Dim")) }
         else { $rows += , @(, @("= .gitignore   kept, nothing to add", "Dim")) }
     }
     foreach ($s in $skipped) { $rows += , @(@("! ", "Yellow"), @($s.PadRight(12) + " ", ""), @("already existed, left untouched", "Yellow")) }
-    foreach ($s in $newer) { $rows += , @(@("$UP ", "Accent"), @($s.PadRight(12) + " ", ""), @("newer kit version saved as $s.kit-new", "Accent")) }
+    foreach ($s in $newer) { $rows += , @(@("$UP ", "Accent"), @($s.PadRight(12) + " ", ""), @("newer kit version $(if ($DryRun) { 'would be saved' } else { 'saved' }) as $s.kit-new", "Accent")) }
     if ($same) { $rows += , @(, @("= $(Format-Files $same) already up to date", "Dim")) }
     for ($i = 0; $i -lt $rows.Count; $i++) {
         Write-Part ("    " + $(if ($i -eq $rows.Count - 1) { $ELB } else { $TEE }) + " ") Dim
@@ -355,6 +389,13 @@ try {
     $anchor = @{ claude = "claude-code-only-claude"; agents = "codex-or-other-agents-agents"; both = "both-both" }[$For]
     $promptUrl = "$repo/blob/main/PROMPTS.md#$anchor"
     Write-Host ""
+    if ($DryRun) {
+        Write-Part "  $STAR " Accent; Write-Part "Dry run finished." Bold; Write-Part " Nothing was changed." -End
+        Write-Part "    Run the same command without "; Write-Part "-DryRun" Bold; Write-Part " to do it for real." -End
+        Write-Host ""
+        $state.done = $true
+        return
+    }
     Write-Part "  $STAR " Accent; Write-Part "Next steps" Bold -End
     Write-Host ""
     if ($Update) {
