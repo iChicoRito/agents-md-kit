@@ -3,10 +3,18 @@
 - Use a skill or plugin only when it directly helps the current task. Do not load one just because it is available.
 - For general work, use the primary skills: Superpowers, Ponytail, and Caveman.
 - For frontend or UI/UX work, use the design skills below. Install others only if they fit the task.
-- Skills are installed globally, not copied into this repo. `.claude/skills/` holds only skills made for this project.
+- Shared skills are installed globally, not copied into this repo.
+- Skills made for this project live in `.agents/skills/<name>/SKILL.md`, one folder each, for every agent. List each one under "Project skills" below. When its task comes up, open its `SKILL.md` and follow it.
 - Plugins listed in `.claude/settings.json` (Superpowers, Ponytail, Caveman, mattpocock-skills, ux-ui-agent-skills, unslop-ui): Claude Code offers to install them when the project opens.
 - The Caveman skills (`caveman`, `caveman-commit`, `caveman-review` and more) and the design skills (`impeccable`, `ui-ux-pro-max`, `design-taste-frontend`) must be installed by hand. See `docs/guides/setup.md`.
-- Agents that do not load skills automatically (e.g. Codex): find the skill's `SKILL.md` in `~/.claude/skills/` or `~/.claude/plugins/` and follow it.
+- Agents that do not load skills automatically (e.g. Codex): find the skill's `SKILL.md` in `~/.agents/skills/`, `~/.claude/skills/` or `~/.claude/plugins/` and follow it.
+
+## Project skills
+
+Skills in `.agents/skills/`. None yet. Add a row for each new one.
+
+| Task | Skill file |
+|---|---|
 
 ## Which skill for which task
 
