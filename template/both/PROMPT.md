@@ -9,6 +9,8 @@ Open Claude Code or Codex in this project and send **one** of these:
 - Short: `Read PROMPT.md and do what it says.`
 - Or copy the whole prompt below and paste it.
 
+New project? Run it after your first features exist. Until then most entries stay `TODO`.
+
 Then review what it wrote before you commit. When you are done, delete this file, or keep it to run again after big changes.
 
 ## Prompt

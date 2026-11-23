@@ -2,7 +2,7 @@
 
 After you install the kit in an **existing project**, copy the prompt for your version and paste it into your AI agent. The agent reads your code and fills the `[PLACEHOLDERS]` for you.
 
-The installer also puts your version's prompt in the project as `PROMPT.md`. You can just tell your agent: `Read PROMPT.md and do what it says.`
+For existing projects (and new ones, if you say yes), the installer also puts your version's prompt in the project as `PROMPT.md`. You can just tell your agent: `Read PROMPT.md and do what it says.`
 
 Not sure which version you installed?
 

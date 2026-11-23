@@ -16,7 +16,14 @@ New here? Read the **[guide](GUIDE.md)**: what every file does, and how to use t
 | `agents` | Codex and other agents only | `AGENTS.md` | `.agents/` |
 | `both` | Claude Code and Codex in the same project | `CLAUDE.md`, with `AGENTS.md` pointing to it | `.claude/` and `.agents/` |
 
-The installer asks which one you want. If it cannot ask (for example in a script), it installs `both`.
+The installer asks two questions:
+
+1. **Which agents?** Claude Code, Codex / other agents, or both.
+2. **New or existing project?** It suggests the answer from your folder (empty folder = new).
+   - **Existing:** it adds `PROMPT.md`, a ready prompt that makes your AI fill the placeholders from your code.
+   - **New:** it asks if you want `PROMPT.md` for later (default: no). You fill the files as you build.
+
+If it cannot ask (for example in a script), it uses `both` and detects new or existing from the folder.
 
 ## Install
 
@@ -34,14 +41,14 @@ Open a terminal **in your project folder** and run one command. It asks which ve
 curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.sh | bash
 ```
 
-**Skip the question** by naming the version (`claude`, `agents` or `both`):
+**Skip the questions** with options: `--for claude|agents|both`, `--project new|existing`, `--prompt yes|no` (PowerShell: `-For`, `-Project`, `-Prompt`):
 
 ```powershell
-& ([scriptblock]::Create((irm https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.ps1))) -For claude
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.ps1))) -For claude -Project existing
 ```
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.sh | bash -s -- --for claude
+curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.sh | bash -s -- --for claude --project existing
 ```
 
 **Install into another folder** by adding the path at the end:
@@ -70,7 +77,7 @@ See all options: add `--help` (Bash) or `-Help` (PowerShell) to the command.
 
 ```text
 CLAUDE.md          main instructions
-PROMPT.md          prompt that makes your AI fill the placeholders
+PROMPT.md          prompt that makes your AI fill the placeholders (existing projects, or new if you choose)
 .gitignore         keeps personal Claude files out of git
 .claude/
   rules/           how Claude should work (loaded automatically)
@@ -84,7 +91,7 @@ docs/              architecture, API, database, guides, decisions
 
 ```text
 AGENTS.md          main instructions
-PROMPT.md          prompt that makes your AI fill the placeholders
+PROMPT.md          prompt that makes your AI fill the placeholders (existing projects, or new if you choose)
 .agents/
   rules/           how agents should work (AGENTS.md lists them)
   skills/          skills made only for this project
@@ -96,7 +103,7 @@ docs/              architecture, API, database, guides, decisions
 ```text
 CLAUDE.md          main instructions (all agents)
 AGENTS.md          pointer: tells Codex to read CLAUDE.md
-PROMPT.md          prompt that makes your AI fill the placeholders
+PROMPT.md          prompt that makes your AI fill the placeholders (existing projects, or new if you choose)
 .gitignore         keeps personal Claude files out of git
 .claude/
   rules/           how agents should work
@@ -118,7 +125,7 @@ docs/              architecture, API, database, guides, decisions
 
 ## After install
 
-1. Fill the `[PLACEHOLDERS]` in the main file (`CLAUDE.md`, or `AGENTS.md` for the `agents` version) and in `docs/`. The installer adds `PROMPT.md` with the ready prompt for your version. Tell your AI agent:
+1. Fill the `[PLACEHOLDERS]` in the main file (`CLAUDE.md`, or `AGENTS.md` for the `agents` version) and in `docs/`. For an existing project (or a new one where you chose it), the installer adds `PROMPT.md` with the ready prompt for your version. Tell your AI agent:
    > Read PROMPT.md and do what it says.
 
    It reads your code and fills everything in. The same prompts are online in [PROMPTS.md](PROMPTS.md):

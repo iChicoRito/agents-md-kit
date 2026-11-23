@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # agents-md-kit installer: copy the AI agent template into a project folder.
 # Usage:
-#   bash install.sh [--for claude|agents|both] [target folder]      (from a clone)
+#   bash install.sh [options] [target folder]                       (from a clone)
 #   curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.sh | bash
-#   curl -fsSL .../install.sh | bash -s -- --for claude "path/to/project"
-# --for claude: Claude Code only (CLAUDE.md, .claude/)
-# --for agents: Codex and other agents only (AGENTS.md, .agents/)
-# --for both:   both (default when no choice is given and nobody can be asked)
+#   curl -fsSL .../install.sh | bash -s -- --for claude --project existing "path/to/project"
+# Options (any option not given is asked; with nobody to ask, the default is used):
+#   --for claude|agents|both    which agents (default: both)
+#   --project new|existing      new/empty or existing project (default: detected from the folder)
+#   --prompt yes|no             add PROMPT.md (existing: always yes; new: default no)
 # Never overwrites: files that already exist are skipped and listed.
 # Exception: an existing .gitignore is kept and only missing lines are added.
 set -euo pipefail
@@ -28,39 +29,75 @@ usage() {
 
   ${B}agents-md-kit${N} installer
 
-  Usage: install.sh [--for claude|agents|both] [target folder]
+  Usage: install.sh [options] [target folder]
 
-    --for claude   Claude Code only        CLAUDE.md + .claude/
-    --for agents   Codex / other agents    AGENTS.md + .agents/
-    --for both     Claude Code and Codex   all of the above (default)
+    --for claude          Claude Code only        CLAUDE.md + .claude/
+    --for agents          Codex / other agents    AGENTS.md + .agents/
+    --for both            Claude Code and Codex   all of the above (default)
 
-  No --for: you are asked. Target folder: current folder if not given.
+    --project new         new or empty project (fill the files as you build)
+    --project existing    project that already has code
+
+    --prompt yes|no       add PROMPT.md, the prompt that makes your AI fill
+                          the placeholders (existing: always added; new: default no)
+
+  Options you leave out are asked. Target folder: current folder if not given.
 
 EOF
 }
 
 # ---------- arguments ----------
-choice=""; target="$PWD"
+choice=""; project=""; prompt=""; target="$PWD"
+need_value() { [ "$2" -ge 2 ] || fail "$1 needs a value (see --help)"; }
 while [ $# -gt 0 ]; do
   case "$1" in
     -h|--help) usage; exit 0 ;;
-    --for) [ $# -ge 2 ] || fail "--for needs a value: claude, agents or both"; choice="$2"; shift 2 ;;
+    --for) need_value "$1" $#; choice="$2"; shift 2 ;;
     --for=*) choice="${1#--for=}"; shift ;;
+    --project) need_value "$1" $#; project="$2"; shift 2 ;;
+    --project=*) project="${1#--project=}"; shift ;;
+    --prompt) need_value "$1" $#; prompt="$2"; shift 2 ;;
+    --prompt=*) prompt="${1#--prompt=}"; shift ;;
     -*) fail "Unknown option: $1 (see --help)" ;;
     *) target="$1"; shift ;;
   esac
 done
 [ -d "$target" ] || fail "Target folder not found: $target"
 target="$(cd "$target" && pwd)"
+case "$choice" in ""|claude|agents|both) ;; *) fail "Unknown --for value: $choice (use claude, agents or both)" ;; esac
+case "$project" in ""|new|existing) ;; *) fail "Unknown --project value: $project (use new or existing)" ;; esac
+case "$prompt" in ""|yes|no) ;; *) fail "Unknown --prompt value: $prompt (use yes or no)" ;; esac
 
-# ---------- header ----------
+# Empty folder (ignoring .git) means a new project.
+detected=existing
+[ -z "$(ls -A "$target" | grep -vxF '.git')" ] && detected=new
+
+# ---------- questions (only when someone can answer) ----------
+can_ask=""
+if { exec 3</dev/tty; } 2>/dev/null; then can_ask=1; fi
+
+# ask "<prompt>" <default> <valid answers...>; result in $answer
+ask() {
+  local text="$1" def="$2"; shift 2
+  local tries=0 a v
+  while :; do
+    printf '  %s ' "$text"; a=""
+    read -r a <&3 || { answer="$def"; say ""; return; }
+    a="$(echo "$a" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+    [ -z "$a" ] && { answer="$def"; return; }
+    for v in "$@"; do [ "$a" = "$v" ] && { answer="$a"; return; }; done
+    tries=$((tries + 1))
+    if [ $tries -ge 3 ]; then answer="$def"; say "  ${Y}No valid answer, using the default.${N}"; return; fi
+    say "  ${Y}Please type one of: $*${N}"
+  done
+}
+
 say ""
 say "  ${B}agents-md-kit${N}  ${D}AI agent setup for your project${N}"
 say "  ${D}--------------------------------------------------${N}"
 
-# ---------- choose version ----------
 if [ -z "$choice" ]; then
-  if { exec 3</dev/tty; } 2>/dev/null; then
+  if [ -n "$can_ask" ]; then
     say ""
     say "  ${B}Which AI agents will you use in this project?${N}"
     say ""
@@ -68,29 +105,51 @@ if [ -z "$choice" ]; then
     say "    ${C}2${N}  Codex / other agents     ${D}AGENTS.md + .agents/${N}"
     say "    ${C}3${N}  Both ${G}(recommended)${N}       ${D}CLAUDE.md + AGENTS.md + both folders${N}"
     say ""
-    tries=0
-    while [ -z "$choice" ]; do
-      printf '  Choose [1-3, Enter = 3]: '
-      answer=""; read -r answer <&3 || { answer=""; tries=3; }
-      case "$answer" in
-        1) choice=claude ;; 2) choice=agents ;; 3|"") choice=both ;;
-        *) tries=$((tries + 1))
-           if [ $tries -ge 3 ]; then choice=both; say "  ${Y}No valid choice, using: both${N}"
-           else say "  ${Y}Please type 1, 2 or 3.${N}"; fi ;;
-      esac
-    done
-    exec 3<&-
+    ask "Choose [1-3, Enter = 3]:" 3 1 2 3
+    case "$answer" in 1) choice=claude ;; 2) choice=agents ;; *) choice=both ;; esac
   else
     choice=both
   fi
 fi
-case "$choice" in claude|agents|both) ;; *) fail "Unknown --for value: $choice (use claude, agents or both)" ;; esac
+
+if [ -z "$project" ]; then
+  if [ -n "$can_ask" ]; then
+    if [ "$detected" = new ]; then def=1; note="this folder looks empty"; else def=2; note="this folder already has files"; fi
+    say ""
+    say "  ${B}Is this a new or an existing project?${N}"
+    say ""
+    say "    ${C}1${N}  New / empty project      ${D}you fill the files as you build${N}"
+    say "    ${C}2${N}  Existing project         ${D}adds PROMPT.md so your AI fills them from your code${N}"
+    say ""
+    ask "Choose [1-2, Enter = $def, $note]:" "$def" 1 2
+    case "$answer" in 1) project=new ;; *) project=existing ;; esac
+  else
+    project="$detected"
+  fi
+fi
+
+if [ "$project" = existing ]; then
+  [ "$prompt" = no ] && say "  ${Y}Existing project: PROMPT.md is always added.${N}"
+  prompt=yes
+elif [ -z "$prompt" ]; then
+  if [ -n "$can_ask" ]; then
+    say ""
+    say "  ${D}PROMPT.md makes your AI fill the placeholders from your code. Useful after your first features exist.${N}"
+    ask "Add PROMPT.md for later? [y/N]:" n y n yes no
+    case "$answer" in y|yes) prompt=yes ;; *) prompt=no ;; esac
+  else
+    prompt=no
+  fi
+fi
+[ -n "$can_ask" ] && exec 3<&-
 
 case "$choice" in
   claude) label="Claude Code only" ;; agents) label="Codex / other agents" ;; both) label="Claude Code + Codex" ;;
 esac
 say ""
 step "Version:  ${B}$choice${N} ${D}($label)${N}"
+step "Project:  ${B}$project${N}"
+step "Prompt:   ${B}$prompt${N} ${D}(PROMPT.md)${N}"
 step "Target:   $target"
 
 # ---------- find or download the template ----------
@@ -114,6 +173,7 @@ copied=0; skipped=(); gi_status=""; gi_added=()
 while IFS= read -r -d '' f; do
   rel="${f#"$template"/}"
   dest="$target/$rel"
+  [ "$rel" = "PROMPT.md" ] && [ "$prompt" = no ] && continue
   if [ "$rel" = ".gitignore" ] && [ -e "$dest" ]; then
     gi_status="checked"
     while IFS= read -r line || [ -n "$line" ]; do
@@ -152,19 +212,26 @@ if [ ${#skipped[@]} -gt 0 ]; then
 fi
 
 main="CLAUDE.md"; [ "$choice" = agents ] && main="AGENTS.md"
-say ""
-say "  ${B}Next steps${N}"
 case "$choice" in claude) anchor="claude-code-only-claude" ;; agents) anchor="codex-or-other-agents-agents" ;; both) anchor="both-both" ;; esac
 prompt_url="https://github.com/iChicoRito/agents-md-kit/blob/main/PROMPTS.md#$anchor"
 prompt_skipped=""; for s in "${skipped[@]+"${skipped[@]}"}"; do [ "$s" = "PROMPT.md" ] && prompt_skipped=1; done
-if [ -n "$prompt_skipped" ]; then
+
+say ""
+say "  ${B}Next steps${N}"
+if [ "$prompt" = yes ] && [ -n "$prompt_skipped" ]; then
   say "    1. Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N}."
   say "       ${Y}Your project already had a PROMPT.md, so the kit's prompt was not added.${N}"
   say "       Copy the prompt from: ${C}$prompt_url${N}"
-else
+elif [ "$project" = existing ]; then
   say "    1. Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N}. Tell your AI:"
   say "       ${C}Read PROMPT.md and do what it says.${N}"
   say "       ${D}(or copy the prompt from PROMPT.md. Online: $prompt_url)${N}"
+elif [ "$prompt" = yes ]; then
+  say "    1. Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N} as you build."
+  say "       After your first features exist, tell your AI: ${C}Read PROMPT.md and do what it says.${N}"
+else
+  say "    1. Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N} as you build."
+  say "       ${D}Later, to let your AI fill them from your code, copy the prompt: $prompt_url${N}"
 fi
 say "    2. Install the skills: ${B}docs/guides/setup.md${N}"
 if [ "$choice" = agents ]; then

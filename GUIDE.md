@@ -33,7 +33,7 @@ The most important file. It tells the AI what the project is, how the folders ar
 Codex and some other AI tools look for `AGENTS.md`, not `CLAUDE.md`. This file only says "read `CLAUDE.md` and follow it". Every AI follows the same instructions, and you keep only one file up to date. Do not put project details here.
 
 **`PROMPT.md`: the fill-in prompt**
-A ready prompt for your version. Tell your AI `Read PROMPT.md and do what it says.` and it fills the `[PLACEHOLDERS]` from your code. Delete it when you are done, or keep it to run again after big changes. Agents do not load it on their own.
+Added for existing projects. For new projects the installer asks (default: no). A ready prompt for your version. Tell your AI `Read PROMPT.md and do what it says.` and it fills the `[PLACEHOLDERS]` from your code. Delete it when you are done, or keep it to run again after big changes. Agents do not load it on their own.
 
 **`.gitignore`: files git leaves out**
 It keeps two personal files out of git:
@@ -109,7 +109,7 @@ Most of these start as forms with `[PLACEHOLDERS]` to fill in.
 In the steps below, "main file" means `CLAUDE.md` (`claude` and `both` versions) or `AGENTS.md` (`agents` version).
 
 1. **Create your project folder** and open a terminal in it.
-2. **Run the install command** (see [README](README.md#install)) and pick your version.
+2. **Run the install command** (see [README](README.md#install)). Pick your version, then **New project**. Say yes to `PROMPT.md` if you want your AI to fill the files later.
 3. **Install the skills.** Open the project in Claude Code and accept the plugin install offer. Then run the four `npx skills add` commands in `docs/guides/setup.md` for the Caveman skills and the design skills.
 4. **Fill in the basics** in `CLAUDE.md`: project description, folders, commands. If you have no code yet, fill these in as you build.
 5. **Fill in `docs/` as you build.** When you design the database, write `docs/database/schema.md`. When you make a big decision, write a decision file.
@@ -117,7 +117,7 @@ In the steps below, "main file" means `CLAUDE.md` (`claude` and `both` versions)
 
 ## Use it on an existing project
 
-1. **Open a terminal in the project folder**, run the same install command and pick your version. It is safe:
+1. **Open a terminal in the project folder**, run the same install command, pick your version, then **Existing project** (it adds `PROMPT.md`). It is safe:
    - It never overwrites a file you already have.
    - It lists the files it skipped.
    - It keeps your `.gitignore` and adds only the missing lines.
