@@ -365,6 +365,7 @@ if [ -n "$gview" ]; then
   if [ -n "$dry" ]; then
     done_line "Graph view" "would be built" "graphify-out/graph.html"; say ""; exit 0
   fi
+  fetch_kit   # outside the $( ) below, so the download spinner shows and the result is kept
   nodes="$(make_view 2>&1)" || fail "Could not build the graph view. ${nodes:-}"
   done_line "Graph view" "built" "${nodes:+$nodes $SEP }graphify-out/graph.html"
   say "    ${D}${ELB} open graphify-out/graph.html in your browser. Run this again after graphify updates the graph.${N}"
