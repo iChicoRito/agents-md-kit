@@ -330,26 +330,101 @@ const P = { center: 0.35, repel: DEF.repel, link: 1, dist: DEF.dist, size: 1, wi
 const radius = (n) => clamp(3 + 1.8 * Math.sqrt(n.deg), 3, 16) * P.size;
 
 /* ---------- simulation ---------- */
-let visNodes = [], visLinks = [];
-const linkForce = d3.forceLink([]).id((d) => d.id);
-const sim = d3.forceSimulation([])
-  .force("link", linkForce)
-  .force("charge", d3.forceManyBody().distanceMax(900).theta(0.9))
-  .force("x", d3.forceX()).force("y", d3.forceY())
-  .velocityDecay(0.35)
-  .on("tick", () => { dirty = true; });
-if (!big) sim.force("collide", d3.forceCollide().radius((n) => radius(n) + 2.5).strength(0.7));
-let paused = false;
-function applyForces() {
-  linkForce.distance(P.dist).strength((l) => (P.link / Math.min(l.source.deg, l.target.deg)));
-  sim.force("charge").strength(-P.repel);
-  sim.force("x").strength(P.center * 0.12); sim.force("y").strength(P.center * 0.12);
+// The physics runs in a Web Worker: a big graph can take 50+ ms per step, and the page
+// must keep drawing, panning and zooming at full speed meanwhile. The same code runs
+// in the page when a worker cannot start.
+function physics(d3, post) {
+  let all = [], pairs = [], sim = null, link = null, paused = false, timer = null, size = 1, P = {};
+  const radius = (n) => Math.min(16, Math.max(3, 3 + 1.8 * Math.sqrt(n.deg))) * size;
+  const send = (first) => {
+    const pos = new Float32Array(all.length * 2);
+    for (let i = 0; i < all.length; i++) { pos[2 * i] = all[i].x; pos[2 * i + 1] = all[i].y; }
+    post({ type: "pos", pos, first }, [pos.buffer]);
+  };
+  // one step at most every 16 ms, so small graphs move at the same speed as before
+  const loop = () => {
+    timer = null;
+    if (paused || sim.alpha() < sim.alphaMin()) return;
+    const t0 = Date.now(); sim.tick(); send(false);
+    timer = setTimeout(loop, Math.max(0, 16 - (Date.now() - t0)));
+  };
+  const kick = () => { if (!timer && !paused) timer = setTimeout(loop, 0); };
+  const forces = () => {
+    link.distance(P.dist).strength((l) => P.link / Math.min(l.source.deg, l.target.deg));
+    sim.force("charge").strength(-P.repel);
+    sim.force("x").strength(P.center * 0.12); sim.force("y").strength(P.center * 0.12);
+  };
+  const show = (mask) => {
+    sim.nodes(all.filter((n) => mask[n.i]));
+    link.links(pairs.filter((l) => mask[l.source.i] && mask[l.target.i]));
+    forces();
+  };
+  return (m) => {
+    if (m.type === "init") {
+      all = m.deg.map((deg, i) => ({ i, deg, x: m.pos[2 * i], y: m.pos[2 * i + 1] }));
+      pairs = []; for (let i = 0; i < m.links.length; i += 2) pairs.push({ source: m.links[i], target: m.links[i + 1] });
+      P = m.P; size = m.P.size; paused = m.paused;
+      link = d3.forceLink([]);
+      sim = d3.forceSimulation(all).stop()
+        .force("link", link)
+        .force("charge", d3.forceManyBody().distanceMax(900).theta(all.length > 3000 ? 1.2 : 0.9))
+        .force("x", d3.forceX()).force("y", d3.forceY())
+        .velocityDecay(0.35);
+      link.links(pairs); // resolves the indexes to nodes once
+      if (all.length <= 3000) sim.force("collide", d3.forceCollide().radius((n) => radius(n) + 2.5).strength(0.7));
+      show(m.mask);
+      // settle the layout before the first picture, then keep moving gently
+      let done = !m.settle;
+      if (m.settle) { const t0 = Date.now(); let i = 0; while (i < 320 && Date.now() - t0 < 700) { sim.tick(); i++; } done = i === 320; }
+      send(true);
+      // a big graph needs more than 0.7 s: it keeps settling in view instead of freezing half done
+      if (done) sim.alpha(m.alpha);
+      kick();
+    } else if (m.type === "forces") { P = m.P; forces(); sim.alpha(Math.max(sim.alpha(), m.heat)); kick(); }
+    else if (m.type === "mask") { show(m.mask); if (m.heat) { sim.alpha(Math.max(sim.alpha(), m.heat)); kick(); } }
+    else if (m.type === "size") { size = m.v; if (sim.force("collide")) sim.force("collide").radius((n) => radius(n) + 2.5); }
+    else if (m.type === "target") { sim.alphaTarget(m.v); kick(); }
+    else if (m.type === "pause") { paused = m.v; if (paused) { clearTimeout(timer); timer = null; } else { sim.alpha(0.3); kick(); } }
+    else if (m.type === "fix") { const n = all[m.i]; n.fx = n.x = m.x; n.fy = n.y = m.y; }
+    else if (m.type === "unfix") { const n = all[m.i]; n.fx = n.fy = null; }
+  };
 }
+let visNodes = [], visLinks = [], paused = false, ready = false;
+const phys = (() => {
+  const receive = (m) => {
+    const pos = m.pos;
+    for (let i = 0; i < nodes.length; i++) { const n = nodes[i]; if (n !== drag) { n.x = pos[2 * i]; n.y = pos[2 * i + 1]; } }
+    dirty = true;
+    if (m.first) { ready = true; fit(false); }
+  };
+  const inPage = () => physics(d3, (m) => receive(m));
+  let worker = null, handle = null;
+  try {
+    const code = $("#graph-data").previousElementSibling.textContent +
+      "\n;const handle = (" + physics + ")(self.d3, (m, t) => postMessage(m, t)); onmessage = (e) => handle(e.data);";
+    const url = URL.createObjectURL(new Blob([code], { type: "text/javascript" }));
+    worker = new Worker(url);
+    URL.revokeObjectURL(url);
+    worker.onmessage = (e) => receive(e.data);
+    // the worker failed to load (blocked by the browser): run the physics in the page
+    worker.onerror = (e) => { e.preventDefault(); worker.terminate(); worker = null; handle = inPage(); handle(initMsg()); };
+  } catch (_) { worker = null; handle = inPage(); }
+  return { post: (m) => (worker ? worker.postMessage(m) : handle(m)), get inWorker() { return !!worker; } };
+})();
+const nodeIndex = new Map(nodes.map((n, i) => [n, i]));
+const mask = () => Uint8Array.from(nodes, (n) => (n.vis ? 1 : 0));
+const forceParams = () => ({ center: P.center, repel: P.repel, link: P.link, dist: P.dist, size: P.size });
+function initMsg() {
+  const pos = new Float32Array(N * 2), ends = new Uint32Array(links.length * 2);
+  nodes.forEach((n, i) => { pos[2 * i] = n.x; pos[2 * i + 1] = n.y; });
+  links.forEach((l, i) => { ends[2 * i] = nodeIndex.get(l.source); ends[2 * i + 1] = nodeIndex.get(l.target); });
+  return { type: "init", deg: nodes.map((n) => n.deg), pos, links: ends, mask: mask(), P: forceParams(), paused, settle: !ready, alpha: reduceMotion ? 0 : 0.12 };
+}
+function applyForces(heat) { phys.post({ type: "forces", P: forceParams(), heat: paused ? 0 : heat || 0 }); }
 function rebuild(heat) {
   visNodes = nodes.filter((n) => n.vis);
   visLinks = links.filter((l) => l.source.vis && l.target.vis);
-  sim.nodes(visNodes); linkForce.links(visLinks); applyForces();
-  if (heat && !paused) sim.alpha(Math.max(sim.alpha(), heat)).restart();
+  if (ready) phys.post({ type: "mask", mask: mask(), heat: paused ? 0 : heat || 0 });
   hoverNode = null; cache.clear(); dirty = true;
 }
 function updateVisibility() {
@@ -413,8 +488,15 @@ function draw() {
   dirty = false;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, W, H);
-  if (!visNodes.length) return;
+  if (!visNodes.length || !ready) return;
   const act = activeSet();
+  // the visible part of the world, with room for the biggest node
+  const m = 20 * P.size + 4 / k, x0 = -tx / k - m, y0 = -ty / k - m, x1 = (W - tx) / k + m, y1 = (H - ty) / k + m;
+  const inView = (n) => n.x > x0 && n.x < x1 && n.y > y0 && n.y < y1;
+  const linkInView = (l) => {
+    const a = l.source, b = l.target;
+    return !((a.x < x0 && b.x < x0) || (a.x > x1 && b.x > x1) || (a.y < y0 && b.y < y0) || (a.y > y1 && b.y > y1));
+  };
   ctx.save();
   ctx.translate(tx, ty); ctx.scale(k, k);
   ctx.lineCap = "round";
@@ -428,10 +510,11 @@ function draw() {
     ctx.strokeStyle = style; ctx.lineWidth = width; ctx.setLineDash(dashed ? [5 / k, 4 / k] : []); ctx.stroke();
   };
   const focus = hoverNode || (hoverGroup === null && !(matches && matches.size) && selected && selected.vis ? selected : null);
-  const calm = [], calmWeak = [], lit = [], litSet = new Set();
+  const calm = [], calmWeak = [], lit = [];
   for (const l of visLinks) {
+    if (!linkInView(l)) continue;
     const on = act && (focus ? (l.source === focus || l.target === focus) : (act.has(l.source) && act.has(l.target)));
-    if (on) { lit.push(l); litSet.add(l); } else (l.weak ? calmWeak : calm).push(l);
+    if (on) lit.push(l); else (l.weak ? calmWeak : calm).push(l);
   }
   const base = act ? C.linkDim : C.link;
   strokeLinks(calm, base, lw, false); strokeLinks(calmWeak, base, lw, true);
@@ -439,24 +522,38 @@ function draw() {
   ctx.setLineDash([]);
 
   if (P.arrows && k > 0.5) {
-    ctx.fillStyle = act ? C.linkDim : C.link;
-    for (const l of visLinks) arrow(l, litSet.has(l));
+    ctx.beginPath(); for (const l of calm) arrow(l); for (const l of calmWeak) arrow(l);
+    ctx.fillStyle = base; ctx.fill();
+    ctx.beginPath(); for (const l of lit) arrow(l);
+    ctx.fillStyle = C.hi; ctx.fill();
   }
 
-  // nodes
-  const dimA = 0.22;
-  const paintNodes = (on) => {
-    for (const n of visNodes) {
-      const isAct = !act || act.has(n);
-      if (isAct !== on) continue;
-      const r = radius(n);
-      ctx.globalAlpha = isAct ? 1 : dimA;
-      ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 6.2832);
-      ctx.fillStyle = n.group.color; ctx.fill();
-      ctx.lineWidth = 1 / k; ctx.strokeStyle = C.bg; ctx.stroke();
+  // nodes: one path per group color, dimmed ones first
+  const buckets = new Map();
+  for (const n of visNodes) {
+    if (!inView(n)) continue;
+    const on = !act || act.has(n), key = n.group;
+    let b = buckets.get(key);
+    if (!b) buckets.set(key, (b = [[], []]));
+    b[on ? 1 : 0].push(n);
+  }
+  const outline = k > 0.4;
+  for (const on of [0, 1]) {
+    ctx.globalAlpha = on ? 1 : 0.22;
+    for (const [g, b] of buckets) {
+      const list = b[on];
+      if (!list.length) continue;
+      ctx.beginPath();
+      for (const n of list) {
+        const r = radius(n);
+        // a dot smaller than 1.5 px looks the same as a square and is much cheaper
+        if (r * k < 1.5) ctx.rect(n.x - r, n.y - r, 2 * r, 2 * r);
+        else { ctx.moveTo(n.x + r, n.y); ctx.arc(n.x, n.y, r, 0, 6.2832); }
+      }
+      ctx.fillStyle = g.color; ctx.fill();
+      if (outline) { ctx.lineWidth = 1 / k; ctx.strokeStyle = C.bg; ctx.stroke(); }
     }
-  };
-  paintNodes(false); paintNodes(true);
+  }
   ctx.globalAlpha = 1;
   const ringNode = (n, color, w) => { ctx.beginPath(); ctx.arc(n.x, n.y, radius(n) + 3 / k, 0, 6.2832); ctx.lineWidth = w / k; ctx.strokeStyle = color; ctx.stroke(); };
   if (selected && selected.vis) ringNode(selected, C.ring, 2);
@@ -500,13 +597,12 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 }
-function arrow(l, on) {
+function arrow(l) {
   const dx = l.target.x - l.source.x, dy = l.target.y - l.source.y, d = Math.hypot(dx, dy);
   if (d < 1) return;
   const r = radius(l.target) + 2 / k, ux = dx / d, uy = dy / d, s = 6 / k;
   const bx = l.target.x - ux * r, by = l.target.y - uy * r;
-  ctx.fillStyle = on ? C.hi : ctx.fillStyle;
-  ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx - ux * s - uy * s * 0.5, by - uy * s + ux * s * 0.5); ctx.lineTo(bx - ux * s + uy * s * 0.5, by - uy * s - ux * s * 0.5); ctx.closePath(); ctx.fill();
+  ctx.moveTo(bx, by); ctx.lineTo(bx - ux * s - uy * s * 0.5, by - uy * s + ux * s * 0.5); ctx.lineTo(bx - ux * s + uy * s * 0.5, by - uy * s - ux * s * 0.5); // fill() closes each triangle; closePath() on a long path is very slow
 }
 function frame(now) {
   if (cam) {
@@ -548,9 +644,12 @@ function focusNode(n) {
 /* ---------- picking and pointer input ---------- */
 function pick(x, y) {
   const w = toWorld(x, y);
-  const n = sim.find(w.x, w.y, 44 / k);
-  if (!n) return null;
-  return Math.hypot(n.x - w.x, n.y - w.y) <= radius(n) + 5 / k ? n : null;
+  let best = null, bd = Infinity;
+  for (const n of visNodes) {
+    const d = Math.hypot(n.x - w.x, n.y - w.y);
+    if (d < bd && d <= radius(n) + 5 / k) { best = n; bd = d; }
+  }
+  return best;
 }
 const ptrs = new Map();
 let drag = null, pan = null, pinch = null, down = null, moved = false, hintGone = false;
@@ -577,10 +676,10 @@ cv.addEventListener("pointermove", (e) => {
   }
   if (drag) {
     if (!moved && Math.hypot(e.offsetX - down.x, e.offsetY - down.y) < 4) return;
-    if (!moved) { moved = true; hoverNode = drag; dismissHint(); if (!paused) sim.alphaTarget(0.3).restart(); }
+    if (!moved) { moved = true; hoverNode = drag; dismissHint(); if (!paused) phys.post({ type: "target", v: 0.3 }); }
     const w = toWorld(e.offsetX, e.offsetY);
-    drag.fx = w.x; drag.fy = w.y;
-    if (paused) { drag.x = w.x; drag.y = w.y; dirty = true; }
+    drag.x = w.x; drag.y = w.y; dirty = true;
+    phys.post({ type: "fix", i: nodeIndex.get(drag), x: w.x, y: w.y });
     return;
   }
   if (pan) {
@@ -596,7 +695,7 @@ function endPointer(e) {
   ptrs.delete(e.pointerId);
   if (pinch) { if (ptrs.size < 2) pinch = null; return; }
   if (drag) {
-    if (moved) { drag.fx = drag.fy = null; if (!paused) sim.alphaTarget(0); }
+    if (moved) { phys.post({ type: "unfix", i: nodeIndex.get(drag) }); if (!paused) phys.post({ type: "target", v: 0 }); }
     else select(drag, false);
     drag = null; hoverNode = null; dirty = true;
   } else if (pan) {
@@ -692,7 +791,7 @@ function sliderRow(label, key, min, max, step, fmt, onchange) {
   paint(); sliders.push({ key, paint });
   return el("div", { class: "row" }, el("div", {}, el("span", { class: "lab", text: label }), val), inp);
 }
-const reheat = () => { applyForces(); if (!paused) sim.alpha(Math.max(sim.alpha(), 0.35)).restart(); };
+const reheat = () => applyForces(0.35);
 const groupList = el("div", { class: "groups" });
 for (const c of comms) {
   const b = el("button", { class: "group", "aria-pressed": "true", title: c.name },
@@ -711,7 +810,7 @@ panel.append(
   section("Groups", [groupList]),
   section("Display", [
     toggleRow("Show arrows", "arrows", () => {}),
-    sliderRow("Node size", "size", 0.4, 2.5, 0.05, (v) => v.toFixed(2) + "x", () => { const c = sim.force("collide"); if (c) c.radius((n) => radius(n) + 2.5); }),
+    sliderRow("Node size", "size", 0.4, 2.5, 0.05, (v) => v.toFixed(2) + "x", () => phys.post({ type: "size", v: P.size })),
     sliderRow("Link thickness", "width", 0.3, 3, 0.1, (v) => v.toFixed(1) + "x", () => {}),
     sliderRow("Text fade threshold", "fade", 0, 1, 0.01, (v) => v.toFixed(2), () => {}),
   ]),
@@ -730,7 +829,7 @@ const physBtn = $("#phys");
 function setPaused(v) {
   paused = v; physBtn.setAttribute("aria-pressed", String(v));
   physBtn.title = v ? "Resume physics (Space)" : "Pause physics (Space)"; physBtn.setAttribute("aria-label", v ? "Resume physics" : "Pause physics");
-  if (v) sim.stop(); else sim.alpha(0.3).restart();
+  phys.post({ type: "pause", v });
 }
 physBtn.addEventListener("click", () => setPaused(!paused));
 $("#fit").addEventListener("click", () => fit(true));
@@ -759,13 +858,9 @@ root.dataset.theme = stored === "light" ? "light" : "dark";
 readColors(); refreshSwatches();
 if (!N) { $("#empty").hidden = false; hint.hidden = true; $("#cfg").disabled = true; $("#fit").disabled = true; $("#phys").disabled = true; }
 updateVisibility(); resize(); rebuild(0);
-// settle the layout off-screen first, then let it keep moving gently
-sim.stop();
-{ const t0 = performance.now(); for (let i = 0; i < 320 && performance.now() - t0 < 700; i++) sim.tick(); }
-fit(false);
-if (!reduceMotion) sim.alpha(0.12).restart();
+if (N) phys.post(initMsg()); // the first positions arrive settled, then the view fits them
 requestAnimationFrame(frame);
-window.__graph = { nodes, links, sim, get view() { return { tx, ty, k, W, H }; }, select, fit, setPaused, pick, get paused() { return paused; } };
+window.__graph = { nodes, links, phys, get ready() { return ready; }, get view() { return { tx, ty, k, W, H }; }, select, fit, setPaused, pick, get paused() { return paused; } };
 })();
 </script>
 </body>

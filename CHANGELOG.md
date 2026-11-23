@@ -9,6 +9,13 @@ All notable changes to agents-md-kit. Versions follow [semantic versioning](http
 3. Commit, push, wait for the tests to pass.
 4. Tag and publish: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`.
 
+## 1.6.0 - 2026-11-23
+
+- Faster graph view: smooth (60 fps) with 10,000+ nodes while the layout settles, zooming and dragging. Before, it slowed down above about 1,000 nodes.
+- The physics runs in a Web Worker, so the page keeps drawing while it works. If the browser blocks the worker, it runs in the page as before.
+- Drawing is batched per group, skips what is off screen, and draws tiny dots as squares.
+- Big graphs (over 3,000 nodes) keep settling on screen instead of freezing half done.
+
 ## 1.5.1 - 2026-11-23
 
 - `PROMPT.md` now tells the AI to use graphify when a graph exists: query it first, read files after. If graphify is installed but no graph exists, the AI asks before building one.
