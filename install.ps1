@@ -23,7 +23,8 @@ $repo = "https://github.com/iChicoRito/agents-md-kit"
 # A terminal with ANSI support (Windows Terminal, Windows 10+ console) gets the full look.
 # Older hosts (for example PowerShell ISE) get basic colors and ASCII symbols.
 $E = [char]27
-$vt = [bool]($Host.UI.psobject.Properties['SupportsVirtualTerminal'] -and $Host.UI.SupportsVirtualTerminal)
+# Output sent to a file or pipe gets plain text, like the Bash installer.
+$vt = [bool]($Host.UI.psobject.Properties['SupportsVirtualTerminal'] -and $Host.UI.SupportsVirtualTerminal) -and -not [Console]::IsOutputRedirected
 $noColor = [bool]$env:NO_COLOR
 $ansi = @{ Accent = "$E[38;5;173m"; Dim = "$E[2m"; Green = "$E[32m"; Yellow = "$E[33m"; Red = "$E[31m"; Bold = "$E[1m" }
 $basic = @{ Accent = 'DarkYellow'; Dim = 'DarkGray'; Green = 'Green'; Yellow = 'Yellow'; Red = 'Red'; Bold = 'White' }
@@ -297,12 +298,15 @@ try {
             continue
         }
         if (Test-Path $dest) {
-            if ($Update -and (Test-Path $dest -PathType Leaf)) {
-                # Same content (line endings ignored): nothing to do. Different: save the kit's version beside it.
-                $kitText = [IO.File]::ReadAllText($file.FullName) -replace "`r", ""
-                $yourText = [IO.File]::ReadAllText($dest) -replace "`r", ""
-                if ($kitText -ceq $yourText) { $same++ } else { Copy-Item -LiteralPath $file.FullName -Destination "$dest.kit-new" -Force; $newer += $rel }
-            } else { $skipped += $rel }
+            # Same content (line endings ignored): nothing to do. Different: keep yours;
+            # in update mode also save the kit's version beside it as .kit-new.
+            $isSame = $false
+            if (Test-Path $dest -PathType Leaf) {
+                $isSame = ([IO.File]::ReadAllText($file.FullName) -replace "`r", "") -ceq ([IO.File]::ReadAllText($dest) -replace "`r", "")
+            }
+            if ($isSame) { $same++ }
+            elseif ($Update -and (Test-Path $dest -PathType Leaf)) { Copy-Item -LiteralPath $file.FullName -Destination "$dest.kit-new" -Force; $newer += $rel }
+            else { $skipped += $rel }
             continue
         }
         New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
@@ -316,16 +320,16 @@ try {
     Write-Done "Copied" (Format-Files $copied)
     $rows = @()   # each row: list of @(text, style) parts
     $added | Group-Object { $p = $_ -split '[\\/]'; if ($p.Count -gt 1) { $p[0] + "/" } else { $p[0] } } | Sort-Object Name | ForEach-Object {
-        if ($_.Name.EndsWith("/")) { $rows += , @(@("+ ", "Green"), @($_.Name.PadRight(13), ""), @((Format-Files $_.Count), "Dim")) }
+        if ($_.Name.EndsWith("/")) { $rows += , @(@("+ ", "Green"), @($_.Name.PadRight(12) + " ", ""), @((Format-Files $_.Count), "Dim")) }
         else { $rows += , @(@("+ ", "Green"), @($_.Name, "")) }
     }
     if ($null -ne $gitignoreAdded) {
-        if ($gitignoreAdded.Count) { $rows += , @(@("~ ", "Green"), @(".gitignore".PadRight(13), ""), @("kept, added: $($gitignoreAdded -join ', ')", "Dim")) }
-        else { $rows += , @(@("= .gitignore   kept, nothing to add", "Dim")) }
+        if ($gitignoreAdded.Count) { $rows += , @(@("~ ", "Green"), @(".gitignore".PadRight(12) + " ", ""), @("kept, added: $($gitignoreAdded -join ', ')", "Dim")) }
+        else { $rows += , @(, @("= .gitignore   kept, nothing to add", "Dim")) }
     }
-    foreach ($s in $skipped) { $rows += , @(@("! ", "Yellow"), @($s.PadRight(13), ""), @("already existed, left untouched", "Yellow")) }
-    foreach ($s in $newer) { $rows += , @(@("$UP ", "Accent"), @($s.PadRight(13), ""), @("newer kit version saved as $s.kit-new", "Accent")) }
-    if ($same) { $rows += , @(@("= $(Format-Files $same) already up to date", "Dim")) }
+    foreach ($s in $skipped) { $rows += , @(@("! ", "Yellow"), @($s.PadRight(12) + " ", ""), @("already existed, left untouched", "Yellow")) }
+    foreach ($s in $newer) { $rows += , @(@("$UP ", "Accent"), @($s.PadRight(12) + " ", ""), @("newer kit version saved as $s.kit-new", "Accent")) }
+    if ($same) { $rows += , @(, @("= $(Format-Files $same) already up to date", "Dim")) }
     for ($i = 0; $i -lt $rows.Count; $i++) {
         Write-Part ("    " + $(if ($i -eq $rows.Count - 1) { $ELB } else { $TEE }) + " ") Dim
         foreach ($part in $rows[$i]) { Write-Part $part[0] $part[1] }

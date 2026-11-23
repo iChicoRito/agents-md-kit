@@ -338,13 +338,11 @@ for ((k = 0; k < ${#todo[@]}; k++)); do
     continue
   fi
   if [ -e "$dest" ]; then
-    if [ -n "$update" ] && [ -f "$dest" ]; then
-      # Same content (line endings ignored): nothing to do. Different: save the kit's version beside it.
-      if [ "$(tr -d '\r' < "$f")" = "$(tr -d '\r' < "$dest")" ]; then same=$((same + 1))
-      else cp "$f" "$dest.kit-new"; newer+=("$rel"); fi
-    else
-      skipped+=("$rel")
-    fi
+    # Same content (line endings ignored): nothing to do. Different: keep yours;
+    # in update mode also save the kit's version beside it as .kit-new.
+    if [ -f "$dest" ] && [ "$(tr -d '\r' < "$f")" = "$(tr -d '\r' < "$dest")" ]; then same=$((same + 1))
+    elif [ -n "$update" ] && [ -f "$dest" ]; then cp "$f" "$dest.kit-new"; newer+=("$rel")
+    else skipped+=("$rel"); fi
     continue
   fi
   mkdir -p "$(dirname "$dest")"

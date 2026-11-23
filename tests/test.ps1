@@ -14,6 +14,7 @@ function Test-That([string]$Name, [scriptblock]$Check) {
 # Runs the installer in a child process with no keyboard (stdin redirected), so nothing is asked.
 function Invoke-Install([string[]]$Arguments) {
     $script:log = "" | & $ps -NoProfile -ExecutionPolicy Bypass -File (Join-Path $kit "install.ps1") @Arguments 2>&1 | Out-String
+    $script:log = $script:log -replace "$([char]27)\[[0-9;?]*[A-Za-z]", ''   # drop color codes
     return $LASTEXITCODE -eq 0 -and $script:log -notmatch 'Error:'
 }
 function Test-HasAll([string]$Version, [string]$Dir, [bool]$WithPrompt) {
