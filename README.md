@@ -67,7 +67,7 @@ curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/insta
 
 No git needed. The installer downloads the template and copies it in.
 
-See all options: add `--help` (Bash) or `-Help` (PowerShell) to the command.
+See all options: add `--help` (Bash) or `-Help` (PowerShell) to the command, or see [All commands](#all-commands).
 
 Prefer typed answers? Set `AGENTS_MD_KIT_UI=plain` before running. `NO_COLOR=1` turns colors off.
 
@@ -173,6 +173,38 @@ docs/              architecture, API, database, guides, decisions
 
 Using it on an existing project? See [GUIDE.md](GUIDE.md#use-it-on-an-existing-project) for how to merge.
 
+## All commands
+
+Bash (Mac, Linux, Git Bash) uses `--option`. PowerShell uses `-Option`. Options can be combined, and the folder path goes at the end.
+
+| Goal | Bash | PowerShell |
+|---|---|---|
+| Install, answering the questions | `curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.sh \| bash` | `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.ps1)))` |
+| Claude Code only | `--for claude` | `-For claude` |
+| Codex / other agents only | `--for agents` | `-For agents` |
+| Claude Code and Codex | `--for both` | `-For both` |
+| New or empty project | `--project new` | `-Project new` |
+| Existing project | `--project existing` | `-Project existing` |
+| Add `PROMPT.md` or not (new projects) | `--prompt yes` / `--prompt no` | `-Prompt yes` / `-Prompt no` |
+| Update a project that has the kit | `--update` | `-Update` |
+| Install a released version | `--version 1.0.1` | `-Version 1.0.1` |
+| Install into another folder | `... "path/to/project"` | `... "C:\path\to\project"` |
+| Show help | `--help` | `-Help` |
+| Typed answers instead of arrow keys | `AGENTS_MD_KIT_UI=plain` before `bash` | `$env:AGENTS_MD_KIT_UI = "plain"` first |
+| No colors | `NO_COLOR=1` before `bash` | `$env:NO_COLOR = "1"` first |
+
+With Bash, options go after `bash -s --`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.sh | bash -s -- --for claude --project existing
+```
+
+With PowerShell, options go after the last `)`:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.ps1))) -For claude -Project existing
+```
+
 ## Optional: short command
 
 Add an `agents-md-kit` command so you can type one word in any project. Options pass through, for example `agents-md-kit --for claude`.
@@ -190,6 +222,17 @@ agents-md-kit() { curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents
 ```
 
 PowerShell uses `-For claude`; Bash uses `--for claude`.
+
+Open a new terminal after adding it, then:
+
+| Goal | Bash | PowerShell |
+|---|---|---|
+| Install, answering the questions | `agents-md-kit` | `agents-md-kit` |
+| Claude Code, existing project | `agents-md-kit --for claude --project existing` | `agents-md-kit -For claude -Project existing` |
+| Update a project that has the kit | `agents-md-kit --update` | `agents-md-kit -Update` |
+| Install a released version | `agents-md-kit --version 1.0.1` | `agents-md-kit -Version 1.0.1` |
+| Install into another folder | `agents-md-kit --for both "path/to/project"` | `agents-md-kit -For both "C:\path\to\project"` |
+| Show help | `agents-md-kit --help` | `agents-md-kit -Help` |
 
 ## License
 
