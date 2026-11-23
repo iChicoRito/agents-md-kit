@@ -4,6 +4,8 @@
 
 A small, scalable instruction setup for AI coding agents. One command adds it to any project. Pick the version for the agents you use: Claude Code, Codex (and other agents), or both.
 
+![The agents-md-kit installer: pick with arrow keys, then see what was added](assets/demo.gif)
+
 - One main instruction file, kept under 200 lines.
 - Working rules, one topic per file.
 - `docs/` for architecture, API, database and guides. Agents open these only when a task needs them.
