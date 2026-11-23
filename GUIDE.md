@@ -8,6 +8,20 @@ AI agents need instructions about your project. If everything is in one huge fil
 
 This kit uses a small "front page" that the agent always reads, plus separate files that it opens only when a task needs them. The project can grow big, and the agent still reads very little every session.
 
+## Pick your version
+
+The installer asks which agents you use and installs one of three versions:
+
+| Version | Use it when | What is different |
+|---|---|---|
+| `claude` | You only use Claude Code | No `AGENTS.md`, no `.agents/`. Everything lives in `CLAUDE.md` and `.claude/`. |
+| `agents` | You only use Codex or other agents | No `CLAUDE.md`, no `.claude/`. `AGENTS.md` is the main file, rules live in `.agents/rules/`. No line-limit hook and no plugin settings (those are Claude Code features). Skills are installed with `npx skills add`. |
+| `both` | You use Claude Code and Codex together | `CLAUDE.md` is the main file. `AGENTS.md` points Codex to it. Both `.claude/` and `.agents/`. |
+
+Not sure? Pick `both`. It works for every agent.
+
+The file list below describes the `both` version. The other two versions have a subset of these files, as the table says.
+
 ## What each file does
 
 ### Files at the top of the project
@@ -89,8 +103,10 @@ Most of these start as forms with `[PLACEHOLDERS]` to fill in.
 
 ## Use it on a new project
 
+In the steps below, "main file" means `CLAUDE.md` (`claude` and `both` versions) or `AGENTS.md` (`agents` version).
+
 1. **Create your project folder** and open a terminal in it.
-2. **Run the install command** (see [README](README.md#install)).
+2. **Run the install command** (see [README](README.md#install)) and pick your version.
 3. **Install the skills.** Open the project in Claude Code and accept the plugin install offer. Then run the four `npx skills add` commands in `docs/guides/setup.md` for the Caveman skills and the design skills.
 4. **Fill in the basics** in `CLAUDE.md`: project description, folders, commands. If you have no code yet, fill these in as you build.
 5. **Fill in `docs/` as you build.** When you design the database, write `docs/database/schema.md`. When you make a big decision, write a decision file.
@@ -98,7 +114,7 @@ Most of these start as forms with `[PLACEHOLDERS]` to fill in.
 
 ## Use it on an existing project
 
-1. **Open a terminal in the project folder** and run the same install command. It is safe:
+1. **Open a terminal in the project folder**, run the same install command and pick your version. It is safe:
    - It never overwrites a file you already have.
    - It lists the files it skipped.
    - It keeps your `.gitignore` and adds only the missing lines.
