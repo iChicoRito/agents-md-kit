@@ -31,11 +31,11 @@ case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
 esac
 if [ -n "$utf" ]; then
   DOT="●"; PTR="❯"; ELB="└"; TEE="├"; STAR="✻"; SEP="·"; UP="↑"; DN="↓"
-  SPIN=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+  SPIN=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏); FULL="█"; EMPTY="░"
   TL="╭"; TR="╮"; BL="╰"; BR="╯"; H="─"; V="│"
 else
   DOT="*"; PTR=">"; ELB="'-"; TEE="|-"; STAR="*"; SEP="-"; UP="up"; DN="down"
-  SPIN=('|' '/' '-' '\')
+  SPIN=('|' '/' '-' '\'); FULL="#"; EMPTY="-"
   TL="+"; TR="+"; BL="+"; BR="+"; H="-"; V="|"
 fi
 
@@ -107,11 +107,23 @@ if [ -n "$can_ask" ] && [ -n "$ansi" ] && [ "${AGENTS_MD_KIT_UI:-}" != plain ] \
 fi
 
 cleanup() {
-  if [ -n "$menus" ]; then printf '\033[?25h'; stty "$old_stty" 2>/dev/null <&3 || true; fi
+  [ -n "$ansi" ] && printf '\033[?25h'
+  if [ -n "$menus" ]; then stty "$old_stty" 2>/dev/null <&3 || true; fi
   [ -n "${tmp:-}" ] && rm -rf "$tmp"; return 0
 }
 trap cleanup EXIT
 trap 'printf "\n\n  %s%s%s Cancelled. Files already copied stay; run again to finish.\n\n" "$Y" "$DOT" "$N"; exit 130' INT
+
+# progress <done> <total>: one redrawn line "Installing [bar] 52% 13/25" (nothing without ANSI).
+# The short pause per file only makes the bar visible; the copy itself takes a blink.
+progress() {
+  [ -n "$ansi" ] || return 0
+  local w=28 fill=$(( $1 * 28 / ($2 > 0 ? $2 : 1) )) pct=$(( $1 * 100 / ($2 > 0 ? $2 : 1) )) on="" off="" i
+  for ((i = 0; i < w; i++)); do if [ $i -lt $fill ]; then on+="$FULL"; else off+="$EMPTY"; fi; done
+  printf '\r  %s%s%s Installing  %s%s%s%s%s%s %3d%%  %s%d/%d%s' "$A" "${SPIN[$1 % ${#SPIN[@]}]}" "$N" \
+    "$A" "$on" "$N" "$D" "$off" "$N" "$pct" "$D" "$1" "$2" "$N"
+  sleep 0.015
+}
 
 # spin "<text>" <pid>: animated spinner until the process ends (plain line without ANSI).
 spin() {
@@ -279,10 +291,17 @@ fi
 
 # ---------- copy ----------
 copied=0; added=(); skipped=(); gi_status=""; gi_added=()
+todo=()
 while IFS= read -r -d '' f; do
+  [ "${f#"$template"/}" = "PROMPT.md" ] && [ "$prompt" = no ] && continue
+  todo+=("$f")
+done < <(find "$template" -type f -print0 | sort -z)
+[ -n "$ansi" ] && printf '\033[?25l'
+for ((k = 0; k < ${#todo[@]}; k++)); do
+  progress "$k" "${#todo[@]}"
+  f="${todo[k]}"
   rel="${f#"$template"/}"
   dest="$target/$rel"
-  [ "$rel" = "PROMPT.md" ] && [ "$prompt" = no ] && continue
   if [ "$rel" = ".gitignore" ] && [ -e "$dest" ]; then
     gi_status="checked"
     while IFS= read -r line || [ -n "$line" ]; do
@@ -302,7 +321,9 @@ while IFS= read -r -d '' f; do
   mkdir -p "$(dirname "$dest")"
   cp "$f" "$dest"
   copied=$((copied + 1)); added+=("$rel")
-done < <(find "$template" -type f -print0 | sort -z)
+done
+progress "${#todo[@]}" "${#todo[@]}"
+[ -n "$ansi" ] && printf '\r\033[2K\033[?25h'
 
 # ---------- result: a small tree of what changed ----------
 done_line "Copied" "$(files "$copied")"

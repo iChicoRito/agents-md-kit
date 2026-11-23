@@ -29,11 +29,11 @@ if ($vt) {
     $DOT = [string][char]0x25CF; $PTR = [string][char]0x276F; $ELB = [string][char]0x2514; $STAR = [string][char]0x273B
     $SEP = [string][char]0x00B7; $UP = [string][char]0x2191; $DN = [string][char]0x2193
     $TL = [string][char]0x256D; $TR = [string][char]0x256E; $BL = [string][char]0x2570; $BR = [string][char]0x256F
-    $H = [string][char]0x2500; $V = [string][char]0x2502; $TEE = [string][char]0x251C
+    $H = [string][char]0x2500; $V = [string][char]0x2502; $TEE = [string][char]0x251C; $FULL = [string][char]0x2588; $EMPTY = [string][char]0x2591
     $SPIN = @(0x280B, 0x2819, 0x2839, 0x2838, 0x283C, 0x2834, 0x2826, 0x2827, 0x2807, 0x280F | ForEach-Object { [string][char]$_ })
 } else {
     $DOT = "*"; $PTR = ">"; $ELB = "'-"; $STAR = "*"; $SEP = "-"; $UP = "up"; $DN = "down"
-    $TL = "+"; $TR = "+"; $BL = "+"; $BR = "+"; $H = "-"; $V = "|"; $TEE = "|-"
+    $TL = "+"; $TR = "+"; $BL = "+"; $BR = "+"; $H = "-"; $V = "|"; $TEE = "|-"; $FULL = "#"; $EMPTY = "-"
     $SPIN = @("|", "/", "-", "\")
 }
 $state = @{ done = $false; failed = $false }   # for the "Cancelled" message on Ctrl+C
@@ -50,6 +50,17 @@ function Write-Done([string]$Label, [string]$Value, [string]$Note = "") {
     Write-Part "  $DOT " Green; Write-Part $Label.PadRight(10); Write-Part $Value Bold
     if ($Note) { Write-Part " $SEP $Note" Dim }
     Write-Host ""
+}
+# One redrawn line: "Installing [bar] 52%  13/25". Nothing without ANSI support.
+# The short pause per file only makes the bar visible; the copy itself takes a blink.
+function Write-Progress-Bar([int]$Done, [int]$Total) {
+    if (-not $vt) { return }
+    $w = 28; $t = [Math]::Max($Total, 1)
+    $fill = [int][Math]::Floor($Done * $w / $t); $pct = [int][Math]::Floor($Done * 100 / $t)
+    Write-Host "`r" -NoNewline; Write-Part $SPIN[$Done % $SPIN.Count] Accent; Write-Part " Installing  "
+    Write-Part ($FULL * $fill) Accent; Write-Part ($EMPTY * ($w - $fill)) Dim
+    Write-Part (" {0,3}%  " -f $pct); Write-Part "$Done/$Total" Dim
+    Start-Sleep -Milliseconds 15
 }
 function Write-Fail([string]$Message) {
     $state.failed = $true
@@ -246,13 +257,17 @@ try {
 
     # ---------- copy ----------
     $copied = 0; $added = @(); $skipped = @(); $gitignoreAdded = $null
-    Get-ChildItem -Path $Template -Recurse -Force -File | Sort-Object FullName | ForEach-Object {
-        $rel = $_.FullName.Substring($Template.Length).TrimStart('\', '/')
+    $todo = @(Get-ChildItem -Path $Template -Recurse -Force -File | Sort-Object FullName |
+        Where-Object { -not ($Prompt -eq 'no' -and $_.FullName.Substring($Template.Length).TrimStart('\', '/') -eq 'PROMPT.md') })
+    if ($vt) { try { [Console]::CursorVisible = $false } catch {} }
+    for ($k = 0; $k -lt $todo.Count; $k++) {
+        Write-Progress-Bar $k $todo.Count
+        $file = $todo[$k]
+        $rel = $file.FullName.Substring($Template.Length).TrimStart('\', '/')
         $dest = Join-Path $Target $rel
-        if ($rel -eq 'PROMPT.md' -and $Prompt -eq 'no') { return }
         if ($rel -eq '.gitignore' -and (Test-Path $dest)) {
             $have = @(Get-Content -LiteralPath $dest | ForEach-Object { $_.Trim() })
-            $missing = @(Get-Content -LiteralPath $_.FullName | ForEach-Object { $_.Trim() } |
+            $missing = @(Get-Content -LiteralPath $file.FullName | ForEach-Object { $_.Trim() } |
                 Where-Object { $_ -and -not $_.StartsWith('#') -and $have -notcontains $_ })
             if ($missing.Count) {
                 $raw = [IO.File]::ReadAllText($dest)
@@ -262,13 +277,15 @@ try {
                 [IO.File]::AppendAllText($dest, $text)
             }
             $gitignoreAdded = $missing
-            return
+            continue
         }
-        if (Test-Path $dest) { $skipped += $rel; return }
+        if (Test-Path $dest) { $skipped += $rel; continue }
         New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
-        Copy-Item -LiteralPath $_.FullName -Destination $dest
+        Copy-Item -LiteralPath $file.FullName -Destination $dest
         $copied++; $added += $rel
     }
+    Write-Progress-Bar $todo.Count $todo.Count
+    if ($vt) { Write-Host "`r$E[2K" -NoNewline; try { [Console]::CursorVisible = $true } catch {} }
 
     # ---------- result: a small tree of what changed ----------
     Write-Done "Copied" (Format-Files $copied)
