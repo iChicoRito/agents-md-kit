@@ -30,7 +30,7 @@ Files to fill:
 - docs/glossary.md
 
 Rules:
-1. Read the code, config files (package.json, pyproject.toml, Dockerfile, CI files and similar) and any existing docs or README first. Do not guess.
+1. Read the code, config files (package.json, pyproject.toml, Dockerfile, CI files and similar) and any existing docs or README first. Do not guess. If graphify-out/graph.json exists, use the graphify rule (graphify query, explain, path) to find your way before you read files. If graphify is installed but there is no graph, ask me before you run graphify update .
 2. Only write facts you found in the project. If something is unknown, write "TODO: <what is missing>". If a part does not exist (for example no database or no API), write "Not used in this project." in that doc.
 3. Keep the existing sections and headings. Replace every [PLACEHOLDER] in the files above.
 4. Do not fill docs/architecture/decisions/0000-template.md. It is a blank form. If you find important past decisions, add them as new files (0001-..., 0002-...) and list them in docs/architecture/decisions/README.md.
@@ -58,7 +58,7 @@ Files to fill:
 
 Rules:
 1. First read AGENTS.md and every file in .agents/rules/, and follow them.
-2. Read the code, config files (package.json, pyproject.toml, Dockerfile, CI files and similar) and any existing docs or README first. Do not guess.
+2. Read the code, config files (package.json, pyproject.toml, Dockerfile, CI files and similar) and any existing docs or README first. Do not guess. If graphify-out/graph.json exists, use the graphify rule (graphify query, explain, path) to find your way before you read files. If graphify is installed but there is no graph, ask me before you run graphify update .
 3. Only write facts you found in the project. If something is unknown, write "TODO: <what is missing>". If a part does not exist (for example no database or no API), write "Not used in this project." in that doc.
 4. Keep the existing sections and headings. Replace every [PLACEHOLDER] in the files above.
 5. Do not fill docs/architecture/decisions/0000-template.md. It is a blank form. If you find important past decisions, add them as new files (0001-..., 0002-...) and list them in docs/architecture/decisions/README.md.
@@ -92,7 +92,7 @@ Files to fill:
 
 Rules:
 1. First read CLAUDE.md and every file in .claude/rules/, and follow them.
-2. Read the code, config files (package.json, pyproject.toml, Dockerfile, CI files and similar) and any existing docs or README first. Do not guess.
+2. Read the code, config files (package.json, pyproject.toml, Dockerfile, CI files and similar) and any existing docs or README first. Do not guess. If graphify-out/graph.json exists, use the graphify rule (graphify query, explain, path) to find your way before you read files. If graphify is installed but there is no graph, ask me before you run graphify update .
 3. Only write facts you found in the project. If something is unknown, write "TODO: <what is missing>". If a part does not exist (for example no database or no API), write "Not used in this project." in that doc.
 4. Keep the existing sections and headings. Replace every [PLACEHOLDER] in the files above.
 5. Do not fill docs/architecture/decisions/0000-template.md. It is a blank form. If you find important past decisions, add them as new files (0001-..., 0002-...) and list them in docs/architecture/decisions/README.md.

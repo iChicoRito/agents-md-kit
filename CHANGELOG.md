@@ -9,6 +9,10 @@ All notable changes to agents-md-kit. Versions follow [semantic versioning](http
 3. Commit, push, wait for the tests to pass.
 4. Tag and publish: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`.
 
+## 1.5.1 - 2026-11-23
+
+- `PROMPT.md` now tells the AI to use graphify when a graph exists: query it first, read files after. If graphify is installed but no graph exists, the AI asks before building one.
+
 ## 1.5.0 - 2026-11-23
 
 - New graph view: `graphify-out/graph.html` is now an interactive, Obsidian-style map of the code. It is one offline file (no network, no CDN). Dragging a node pulls its neighbors along the links (force simulation). Hover lights up a node and its neighbors, click opens details and connections, `/` searches, the settings panel hides groups and tunes the forces, and there are dark and light themes. The look follows shadcn/ui (zinc).
