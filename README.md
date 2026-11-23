@@ -95,6 +95,7 @@ Prefer typed answers? Set `AGENTS_MD_KIT_UI=plain` before running. `NO_COLOR=1` 
 - It never overwrites a file. Files that already exist are skipped and listed, so you can merge them by hand.
 - It keeps an existing `.gitignore` and adds only the missing lines at the end.
 - Running it again changes nothing.
+- It asks before it touches graphify. At the end it offers to install the official [graphify](https://pypi.org/project/graphifyy/) if it is missing, then offers to build the code graph. Both default to No. In scripts there is no question: nothing is installed or built unless you pass `--graphify yes`.
 - Not sure? Add `--dry-run` (Bash) or `-DryRun` (PowerShell) first. It shows what would be added, merged or skipped, and changes nothing.
 
 **Update a project that already has the kit**
@@ -213,6 +214,7 @@ Bash (Mac, Linux, Git Bash) uses `--option`. PowerShell uses `-Option`. **Option
 | Preview only, change nothing | `--dry-run` | `-DryRun` |
 | Add the short command `agents-md-kit` | `--add-command` | `-AddCommand` |
 | List the `[PLACEHOLDERS]` still left | `--check` | `-Check` |
+| graphify without being asked: install if missing and build the graph, or skip it | `--graphify yes` / `--graphify no` | `-Graphify yes` / `-Graphify no` |
 | Show help | `--help` | `-Help` |
 | Typed answers instead of arrow keys | `AGENTS_MD_KIT_UI=plain` before `bash` | `$env:AGENTS_MD_KIT_UI = "plain"` first |
 | No colors | `NO_COLOR=1` before `bash` | `$env:NO_COLOR = "1"` first |

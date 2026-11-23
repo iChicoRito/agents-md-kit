@@ -23,7 +23,7 @@ Check with `/skills` in Claude Code.
 
 ## Graphify (optional): a knowledge graph of the code
 
-Graphify turns the codebase into a graph the AI can query. It then asks the graph instead of reading many files, which saves tokens on big projects. The rule `graphify.md` tells the AI how to use it, and does nothing until a graph exists.
+Graphify turns the codebase into a graph the AI can query. It then asks the graph instead of reading many files, which saves tokens on big projects. The rule `graphify.md` tells the AI how to use it, and does nothing until a graph exists. The kit installer offers both steps below and asks first (default No). This is the manual way.
 
 ```bash
 uv tool install graphifyy        # or: pip install graphifyy   (the package name has two y)

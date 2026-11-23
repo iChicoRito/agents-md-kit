@@ -15,7 +15,7 @@
 # Exception: an existing .gitignore is kept and only missing lines are added.
 set -euo pipefail
 
-kit_version="1.3.0"   # keep equal to the VERSION file (the tests check this)
+kit_version="1.4.0"   # keep equal to the VERSION file (the tests check this)
 repo="https://github.com/iChicoRito/agents-md-kit"
 archive="$repo/archive/refs/heads/main.tar.gz"
 
@@ -81,13 +81,16 @@ usage() {
     --check               list the [PLACEHOLDERS] still left in CLAUDE.md, AGENTS.md
                           and docs/, then stop (exit code 1 when some are left)
 
+    --graphify yes|no     graphify, the code knowledge graph: yes = install it if missing and
+                          build the graph without asking, no = skip it (default: ask)
+
   ${D}Options you leave out are asked. Target folder: current folder if not given.${N}
 
 EOF
 }
 
 # ---------- arguments ----------
-choice=""; project=""; prompt=""; update=""; want_version=""; dry=""; add_cmd=""; check=""; target="$PWD"
+choice=""; project=""; prompt=""; update=""; want_version=""; dry=""; add_cmd=""; check=""; gfy_flag=""; gfy_log=""; target="$PWD"
 need_value() { [ "$2" -ge 2 ] || fail "$1 needs a value (see --help)"; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -104,6 +107,8 @@ while [ $# -gt 0 ]; do
     --dry-run) dry=1; shift ;;
     --add-command) add_cmd=1; shift ;;
     --check) check=1; shift ;;
+    --graphify) need_value "$1" $#; gfy_flag="$2"; shift 2 ;;
+    --graphify=*) gfy_flag="${1#--graphify=}"; shift ;;
     -*) fail "Unknown option: $1 (see --help)" ;;
     *) target="$1"; shift ;;
   esac
@@ -170,6 +175,7 @@ fi
 case "$choice" in ""|claude|agents|both) ;; *) fail "Unknown --for value: $choice (use claude, agents or both)" ;; esac
 case "$project" in ""|new|existing) ;; *) fail "Unknown --project value: $project (use new or existing)" ;; esac
 case "$prompt" in ""|yes|no) ;; *) fail "Unknown --prompt value: $prompt (use yes or no)" ;; esac
+case "$gfy_flag" in ""|yes|no) ;; *) fail "Unknown --graphify value: $gfy_flag (use yes or no)" ;; esac
 # A pinned version downloads that release; "1.0.0" and "v1.0.0" both work.
 want_version="${want_version#v}"
 if [ -n "$want_version" ]; then
@@ -206,7 +212,9 @@ fi
 cleanup() {
   [ -n "$ansi" ] && printf '\033[?25h'
   if [ -n "$menus" ]; then stty "$old_stty" 2>/dev/null <&3 || true; fi
-  [ -n "${tmp:-}" ] && rm -rf "$tmp"; return 0
+  [ -n "${tmp:-}" ] && rm -rf "$tmp"
+  [ -n "$gfy_log" ] && rm -f "$gfy_log"
+  return 0
 }
 trap cleanup EXIT
 trap 'printf "\n\n  %s%s%s Cancelled. Files already copied stay; run again to finish.\n\n" "$Y" "$DOT" "$N"; exit 130' INT
@@ -373,7 +381,6 @@ elif [ -z "$prompt" ]; then
     prompt=no
   fi
 fi
-[ -n "$can_ask" ] && exec 3<&-
 done_line "PROMPT.md" "$prompt" "$prompt_note"
 
 # ---------- find or download the template ----------
@@ -486,6 +493,94 @@ case "$choice" in claude) anchor="claude-code-only-claude" ;; agents) anchor="co
 prompt_url="$repo/blob/main/PROMPTS.md#$anchor"
 prompt_skipped=""; for s in "${skipped[@]+"${skipped[@]}"}"; do [ "$s" = "PROMPT.md" ] && prompt_skipped=1; done
 
+# ---------- graphify (optional): asks first, never installs or builds without a yes ----------
+gfy_state=""   # handled: done or declined | skipped: not possible | empty: nobody was asked
+
+# yesno "<question>" "<hint for yes>" "<hint for no>": sets $answer to yes or no (default no)
+yesno() {
+  if [ -n "$menus" ]; then
+    choose "$1" 2 "Yes|$2" "No|$3"
+    case "$answer" in 1) answer=yes ;; *) answer=no ;; esac
+  else
+    say ""; say "  ${D}$2${N}"
+    ask "$1 [y/N]:" n y n yes no
+    case "$answer" in y|yes) answer=yes ;; *) answer=no ;; esac
+  fi
+}
+
+# gfy_run "<text>" <command...>: runs it in the project folder with a spinner; output goes to $gfy_log
+gfy_run() {
+  local text="$1"; shift
+  gfy_log="$(mktemp)"
+  ( cd "$target" && "$@" ) >"$gfy_log" 2>&1 & local pid=$!
+  spin "$text" "$pid"
+  wait "$pid"
+}
+
+graphify_step() {
+  local ans inst=() b nodes
+  if [ -f "$target/graphify-out/graph.json" ]; then
+    done_line "Graphify" "graph found" "the AI will query graphify-out/ first"; gfy_state=handled; return 0
+  fi
+  [ -z "$gfy_flag" ] && [ -z "$can_ask" ] && return 0   # nobody to ask: the next steps mention it
+  if [ "$gfy_flag" = no ]; then
+    done_line "Graphify" "skipped" "build a graph later: graphify update ."; gfy_state=handled; return 0
+  fi
+  if ! command -v graphify >/dev/null 2>&1; then
+    if command -v uv >/dev/null 2>&1; then inst=(uv tool install graphifyy)
+    elif command -v pipx >/dev/null 2>&1; then inst=(pipx install graphifyy)
+    elif command -v python3 >/dev/null 2>&1; then inst=(python3 -m pip install --user graphifyy)
+    elif command -v python >/dev/null 2>&1; then inst=(python -m pip install --user graphifyy); fi
+    if [ ${#inst[@]} -eq 0 ]; then
+      done_line "Graphify" "not installed" "needs uv, pipx or Python. See docs/guides/setup.md"; gfy_state=skipped; return 0
+    fi
+    ans="$gfy_flag"
+    if [ -z "$ans" ]; then
+      yesno "graphify is not installed. Install the official graphify?" \
+        "runs: ${inst[*]}" "you can install it later: see docs/guides/setup.md"
+      ans="$answer"
+    fi
+    if [ "$ans" != yes ]; then
+      done_line "Graphify" "not installed" "skipped, see docs/guides/setup.md"; gfy_state=handled; return 0
+    fi
+    if ! gfy_run "Installing graphify" "${inst[@]}"; then
+      done_line "Graphify" "install failed" "see docs/guides/setup.md"
+      tail -3 "$gfy_log" | sed "s/^/        ${D}/; s/\$/${N}/"; gfy_state=skipped; return 0
+    fi
+    # a new tool may sit in a folder this terminal does not know yet
+    if ! command -v graphify >/dev/null 2>&1; then
+      for b in "$(uv tool dir --bin 2>/dev/null || true)" "$HOME/.local/bin"; do
+        if [ -n "$b" ] && { [ -x "$b/graphify" ] || [ -x "$b/graphify.exe" ]; }; then PATH="$b:$PATH"; break; fi
+      done
+    fi
+    if ! command -v graphify >/dev/null 2>&1; then
+      done_line "Graphify" "installed" "open a new terminal, then run: graphify update ."; gfy_state=handled; return 0
+    fi
+    done_line "Graphify" "installed" "official package: graphifyy"
+  else
+    done_line "Graphify" "found" "already installed"
+  fi
+  ans="$gfy_flag"
+  if [ -z "$ans" ]; then
+    yesno "Build the code graph for this project now?" \
+      "runs: graphify update .  (reads your code only: no AI, no tokens)" "build it later: graphify update ."
+    ans="$answer"
+  fi
+  gfy_state=handled
+  if [ "$ans" != yes ]; then
+    done_line "Graph" "not built" "build it later: graphify update ."; return 0
+  fi
+  if gfy_run "Building the code graph" graphify update .; then
+    nodes="$(grep -o 'Rebuilt: [^[]*' "$gfy_log" | tail -1 | sed 's/^Rebuilt: //' || true)"
+    done_line "Graph" "built" "${nodes:+$nodes $SEP }graphify-out/"
+    say "    ${D}${ELB} commit graphify-out/ to share it, or add it to .gitignore to keep it local${N}"
+  else
+    done_line "Graph" "build failed" "run graphify update . yourself to see why"
+    tail -3 "$gfy_log" | sed "s/^/        ${D}/; s/\$/${N}/"
+  fi
+}
+if [ -z "$dry" ]; then graphify_step; fi
+
 # ---------- next steps ----------
 say ""
 if [ -n "$dry" ]; then
@@ -504,6 +599,7 @@ if [ -n "$update" ]; then
     say "    ${A}1${N}  Nothing to merge. Your kit files match the latest version."
   fi
   say "    ${A}2${N}  New skills or plugins? Check ${B}docs/guides/setup.md${N}"
+  [ -z "$gfy_state" ] && say "    ${D}Optional: build a code graph the AI can query: graphify update .  (see docs/guides/setup.md)${N}"
   say ""
   say "  ${G}${DOT}${N} ${B}Done.${N} ${D}Guide: $repo/blob/main/GUIDE.md${N}"
   say ""
@@ -530,6 +626,7 @@ if [ "$choice" = agents ]; then
 else
   say "    ${A}3${N}  In Claude Code, run ${B}/memory${N} and ${B}/skills${N} to check what loads"
 fi
+[ -z "$gfy_state" ] && say "    ${D}Optional: build a code graph the AI can query: graphify update .  (see docs/guides/setup.md)${N}"
 say "    ${D}See which placeholders are left any time: add${N} ${B}--check${N} ${D}to the install command${N}"
 say ""
 say "  ${G}${DOT}${N} ${B}Done.${N} ${D}Guide: $repo/blob/main/GUIDE.md${N}"

@@ -100,6 +100,40 @@ try {
     $empty = Join-Path $work "empty"; New-Item -ItemType Directory $empty | Out-Null
     Test-That "check: empty folder fails" { -not (Invoke-Install @($empty, "-Check")) }
 
+    "== graphify"
+    # Asks first, installs or builds only with a yes. Fake tools, nothing real is installed.
+    $stubs = Join-Path $work "stubs"; New-Item -ItemType Directory "$stubs\have", "$stubs\inst" | Out-Null
+    $stubGraphify = "@echo off`r`necho graphify %* >> `"%STUBLOG%`"`r`nmkdir graphify-out 2>nul`r`necho {}> graphify-out\graph.json`r`necho [graphify watch] Rebuilt: 7 nodes, 9 edges, 2 communities`r`n"
+    [IO.File]::WriteAllText("$stubs\have\graphify.cmd", $stubGraphify)
+    [IO.File]::WriteAllText("$stubs\graphify.tpl", $stubGraphify)
+    [IO.File]::WriteAllText("$stubs\inst\uv.cmd", "@echo off`r`necho uv %* >> `"%STUBLOG%`"`r`nif `"%1 %2`"==`"tool install`" copy /y `"%~dp0..\graphify.tpl`" `"%~dp0graphify.cmd`" >nul`r`n")
+    $sysPath = "$env:SystemRoot\System32;$env:SystemRoot"
+    # Runs the installer with only the fake tools on PATH. Returns the project folder.
+    function Invoke-Gfy([string]$Name, [string]$ToolDir, [string[]]$Options, [bool]$WithGraph = $false) {
+        $dir = Join-Path $work "gfy-$Name"; New-Item -ItemType Directory $dir | Out-Null
+        if ($WithGraph) { New-Item -ItemType Directory "$dir\graphify-out" | Out-Null; Set-Content "$dir\graphify-out\graph.json" "{}" }
+        Remove-Item "$stubs\inst\graphify.cmd" -ErrorAction SilentlyContinue
+        $script:gfyLog = Join-Path $stubs "log-$Name.txt"; Set-Content $script:gfyLog ""
+        $oldPath = $env:PATH; $env:STUBLOG = $script:gfyLog; $env:PATH = "$ToolDir;$sysPath"
+        try { Invoke-Install (@($dir, "-For", "claude", "-Project", "new", "-Prompt", "no") + $Options) | Out-Null }
+        finally { $env:PATH = $oldPath; Remove-Item Env:STUBLOG -ErrorAction SilentlyContinue }
+        $dir
+    }
+    function Get-StubLog { (Get-Content $script:gfyLog | Where-Object { $_.Trim() }) -join ";" }
+    $gA = Invoke-Gfy "A" "$stubs\have" @("-Graphify", "yes"); $logA = Get-StubLog; $outA = $script:log
+    Test-That "graphify yes (installed): graph built" { (Test-Path "$gA\graphify-out\graph.json") -and $logA -match 'graphify update \.' -and $outA -match 'built' }
+    $gB = Invoke-Gfy "B" "$stubs\inst" @("-Graphify", "yes"); $logB = Get-StubLog
+    Test-That "graphify yes (missing): installs, then builds" { $logB -match 'uv tool install graphifyy' -and $logB -match 'graphify update \.' -and (Test-Path "$gB\graphify-out\graph.json") }
+    $gC = Invoke-Gfy "C" "$stubs\have" @("-Graphify", "no"); $logC = Get-StubLog; $outC = $script:log
+    Test-That "graphify no: nothing runs" { -not $logC -and -not (Test-Path "$gC\graphify-out") -and $outC -match 'skipped' }
+    $gD = Invoke-Gfy "D" "$stubs\have" @(); $logD = Get-StubLog; $outD = $script:log
+    Test-That "graphify (nobody to ask): nothing runs, tip shown" { -not $logD -and -not (Test-Path "$gD\graphify-out") -and $outD -match 'Optional: build a code graph' }
+    $gE = Invoke-Gfy "E" "$stubs\have" @("-Graphify", "yes") $true; $logE = Get-StubLog; $outE = $script:log
+    Test-That "graphify: existing graph is left alone" { -not $logE -and $outE -match 'graph found' }
+    $gG = Invoke-Gfy "G" "$stubs\have" @("-DryRun", "-Graphify", "yes"); $logG = Get-StubLog
+    Test-That "graphify: dry run changes nothing" { -not $logG -and -not (Test-Path "$gG\graphify-out") }
+    Test-That "bad -Graphify value fails" { -not (Invoke-Install @($work, "-Graphify", "maybe")) }
+
     "== errors"
     Test-That "unknown -For value fails" { -not (Invoke-Install @($work, "-For", "nope")) }
     Test-That "missing folder fails" { -not (Invoke-Install @((Join-Path $work "does-not-exist"), "-For", "both")) }

@@ -13,10 +13,10 @@
 # so the Unicode symbols are built from code points.
 #   -Update                    project already has the kit: add missing files, and save the
 #                              newer kit version of changed files as <file>.kit-new
-param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$DryRun, [switch]$AddCommand, [string]$ProfilePath = $PROFILE, [switch]$Check, [switch]$Help)
+param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$DryRun, [switch]$AddCommand, [string]$ProfilePath = $PROFILE, [switch]$Check, [string]$Graphify = "", [switch]$Help)
 $ErrorActionPreference = 'Stop'
 
-$kitVersion = "1.3.0"   # keep equal to the VERSION file (the tests check this)
+$kitVersion = "1.4.0"   # keep equal to the VERSION file (the tests check this)
 $repo = "https://github.com/iChicoRito/agents-md-kit"
 $archive = "$repo/archive/refs/heads/main.zip"
 
@@ -101,6 +101,9 @@ if ($Help) {
     Write-Host "    -Check               list the [PLACEHOLDERS] still left in CLAUDE.md, AGENTS.md"
     Write-Host "                         and docs/, then stop"
     Write-Host ""
+    Write-Host "    -Graphify yes|no     graphify, the code knowledge graph: yes = install it if missing"
+    Write-Host "                         and build the graph without asking, no = skip it (default: ask)"
+    Write-Host ""
     Write-Part "  Options you leave out are asked. Target folder: current folder if not given." Dim -End
     Write-Host ""
     return
@@ -129,6 +132,7 @@ if ($AddCommand) {
 if ($For -and $For -notin @("claude", "agents", "both")) { Write-Fail "Unknown -For value: $For (use claude, agents or both)"; return }
 if ($Project -and $Project -notin @("new", "existing")) { Write-Fail "Unknown -Project value: $Project (use new or existing)"; return }
 if ($Prompt -and $Prompt -notin @("yes", "no")) { Write-Fail "Unknown -Prompt value: $Prompt (use yes or no)"; return }
+if ($Graphify -and $Graphify -notin @("yes", "no")) { Write-Fail "Unknown -Graphify value: $Graphify (use yes or no)"; return }
 # A pinned version downloads that release; "1.0.0" and "v1.0.0" both work.
 $Version = $Version -replace '^v', ''
 if ($Version) {
@@ -316,6 +320,95 @@ if ($Update) {
 }
 Write-Done "PROMPT.md" $Prompt $promptNote
 
+# ---------- graphify (optional): asks first, never installs or builds without a yes ----------
+# Runs a command in the project folder with a spinner. Returns Ok and the last output.
+function Invoke-Spinner([string]$Text, [string]$Exe, [string[]]$CmdArgs, [string]$Dir) {
+    $job = Start-Job -ArgumentList $Exe, $CmdArgs, $Dir -ScriptBlock {
+        param($exe, $cmdArgs, $dir)
+        Set-Location -LiteralPath $dir
+        $out = & $exe @cmdArgs 2>&1 | Out-String
+        [pscustomobject]@{ Code = $LASTEXITCODE; Out = $out }
+    }
+    if ($vt) {
+        try { [Console]::CursorVisible = $false } catch {}
+        for ($i = 0; $job.State -eq 'Running'; $i++) {
+            Write-Host "`r" -NoNewline; Write-Part $SPIN[$i % $SPIN.Count] Accent; Write-Part " $Text "; Write-Part "($([int][Math]::Floor($i / 10))s)" Dim
+            Start-Sleep -Milliseconds 100
+        }
+        Write-Host "`r$E[2K" -NoNewline
+        try { [Console]::CursorVisible = $true } catch {}
+    } else { Write-Part "  $DOT $Text..." -End }
+    $res = @(Receive-Job $job -Wait) | Select-Object -Last 1
+    Remove-Job $job -Force
+    [pscustomobject]@{ Ok = [bool]($res -and $res.Code -eq 0); Out = "$($res.Out)" }
+}
+
+# Yes/No question, default No. Returns $true for yes.
+function Read-YesNo([string]$Question, [string]$YesHint, [string]$NoHint) {
+    if ($menus) { return ((Select-Option $Question 2 @("Yes|$YesHint", "No|$NoHint")) -eq 1) }
+    Write-Host ""; Write-Part "  $YesHint" Dim -End
+    return ((Read-Answer "$Question [y/N]" "n" @("y", "n", "yes", "no")) -in "y", "yes")
+}
+
+function Test-Graphify { [bool](Get-Command graphify -ErrorAction SilentlyContinue) }
+
+# Returns "handled" (done or declined), "skipped" (not possible) or "" (nobody was asked).
+function Invoke-GraphifyStep {
+    if (Test-Path (Join-Path $Target "graphify-out\graph.json")) {
+        Write-Done "Graphify" "graph found" "the AI will query graphify-out/ first"; return "handled"
+    }
+    if (-not $Graphify -and -not $canAsk) { return "" }   # nobody to ask: the next steps mention it
+    if ($Graphify -eq "no") { Write-Done "Graphify" "skipped" "build a graph later: graphify update ."; return "handled" }
+    if (-not (Test-Graphify)) {
+        $inst = $null
+        if (Get-Command uv -ErrorAction SilentlyContinue) { $inst = @("uv", "tool", "install", "graphifyy") }
+        elseif (Get-Command pipx -ErrorAction SilentlyContinue) { $inst = @("pipx", "install", "graphifyy") }
+        else {
+            foreach ($py in "python", "python3", "py") {
+                if (Get-Command $py -ErrorAction SilentlyContinue) { $inst = @($py, "-m", "pip", "install", "--user", "graphifyy"); break }
+            }
+        }
+        if (-not $inst) { Write-Done "Graphify" "not installed" "needs uv, pipx or Python. See docs/guides/setup.md"; return "skipped" }
+        $yes = ($Graphify -eq "yes")
+        if (-not $Graphify) {
+            $yes = Read-YesNo "graphify is not installed. Install the official graphify?" "runs: $($inst -join ' ')" "you can install it later: see docs/guides/setup.md"
+        }
+        if (-not $yes) { Write-Done "Graphify" "not installed" "skipped, see docs/guides/setup.md"; return "handled" }
+        $r = Invoke-Spinner "Installing graphify" $inst[0] $inst[1..($inst.Count - 1)] $Target
+        if (-not $r.Ok) {
+            Write-Done "Graphify" "install failed" "see docs/guides/setup.md"
+            $r.Out -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 3 | ForEach-Object { Write-Part "        $_" Dim -End }
+            return "skipped"
+        }
+        # a new tool may sit in a folder this terminal does not know yet
+        if (-not (Test-Graphify)) {
+            $dirs = @("$HOME\.local\bin")
+            if (Get-Command uv -ErrorAction SilentlyContinue) { $dirs += @(& uv tool dir --bin 2>$null) }
+            if ($inst[0] -in "python", "python3", "py") { $dirs += @(& $inst[0] -c "import sysconfig; print(sysconfig.get_path('scripts', 'nt_user'))" 2>$null) }
+            foreach ($d in $dirs) {
+                if ($d -and ((Test-Path "$d\graphify.exe") -or (Test-Path "$d\graphify.cmd"))) { $env:PATH = "$d;$env:PATH"; break }
+            }
+        }
+        if (-not (Test-Graphify)) { Write-Done "Graphify" "installed" "open a new terminal, then run: graphify update ."; return "handled" }
+        Write-Done "Graphify" "installed" "official package: graphifyy"
+    } else { Write-Done "Graphify" "found" "already installed" }
+    $build = ($Graphify -eq "yes")
+    if (-not $Graphify) {
+        $build = Read-YesNo "Build the code graph for this project now?" "runs: graphify update .  (reads your code only: no AI, no tokens)" "build it later: graphify update ."
+    }
+    if (-not $build) { Write-Done "Graph" "not built" "build it later: graphify update ."; return "handled" }
+    $r = Invoke-Spinner "Building the code graph" "graphify" @("update", ".") $Target
+    if ($r.Ok) {
+        $nodes = if ($r.Out -match 'Rebuilt: ([^\r\n\[]+)') { $Matches[1].Trim() } else { "" }
+        Write-Done "Graph" "built" "$(if ($nodes) { "$nodes $SEP " })graphify-out/"
+        Write-Part "    $ELB commit graphify-out/ to share it, or add it to .gitignore to keep it local" Dim -End
+    } else {
+        Write-Done "Graph" "build failed" "run graphify update . yourself to see why"
+        $r.Out -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 3 | ForEach-Object { Write-Part "        $_" Dim -End }
+    }
+    return "handled"
+}
+
 # ---------- find or download the template ----------
 $tmp = $null
 try {
@@ -427,6 +520,8 @@ try {
         Write-Host ""
     }
     if ($skipped.Count) { Write-Part "      Files marked ! were kept as they are. Merge the kit's version by hand if you want it." Dim -End }
+    $gfyState = ""
+    if (-not $DryRun) { $gfyState = "$(Invoke-GraphifyStep)" }
 
     # ---------- next steps ----------
     $main = if ($For -eq "agents") { "AGENTS.md" } else { "CLAUDE.md" }
@@ -450,6 +545,7 @@ try {
             Write-Part "    1" Accent; Write-Part "  Nothing to merge. Your kit files match the latest version." -End
         }
         Write-Part "    2" Accent; Write-Part "  New skills or plugins? Check "; Write-Part "docs/guides/setup.md" Bold -End
+        if (-not $gfyState) { Write-Part "    Optional: build a code graph the AI can query: graphify update .  (see docs/guides/setup.md)" Dim -End }
         Write-Host ""
         Write-Part "  $DOT " Green; Write-Part "Done." Bold; Write-Part " Guide: $repo/blob/main/GUIDE.md" Dim -End
         Write-Host ""
@@ -478,6 +574,7 @@ try {
     } else {
         Write-Part "    3" Accent; Write-Part "  In Claude Code, run "; Write-Part "/memory" Bold; Write-Part " and "; Write-Part "/skills" Bold; Write-Part " to check what loads" -End
     }
+    if (-not $gfyState) { Write-Part "    Optional: build a code graph the AI can query: graphify update .  (see docs/guides/setup.md)" Dim -End }
     Write-Part "    See which placeholders are left any time: add " Dim; Write-Part "-Check" Bold; Write-Part " to the install command" Dim -End
     Write-Host ""
     Write-Part "  $DOT " Green; Write-Part "Done." Bold; Write-Part " Guide: $repo/blob/main/GUIDE.md" Dim -End

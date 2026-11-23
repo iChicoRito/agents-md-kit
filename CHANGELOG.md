@@ -9,6 +9,12 @@ All notable changes to agents-md-kit. Versions follow [semantic versioning](http
 3. Commit, push, wait for the tests to pass.
 4. Tag and publish: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`.
 
+## 1.4.0 - 2026-11-23
+
+- The installer now asks about graphify at the end, always with No as the default. If `graphify` is missing it offers to install the official package (`graphifyy`, with `uv`, else `pipx`, else `pip --user`). If it is installed, or just got installed, it offers to build the code graph (`graphify update .`, code only, no AI, no tokens). It never installs or builds without a yes, and it skips both when a graph already exists.
+- `--graphify yes|no` / `-Graphify yes|no`: answer for scripts. Without the option and without a keyboard, nothing is installed or built, and the install summary prints a tip instead.
+- Dry run skips the graphify step.
+
 ## 1.3.0 - 2026-11-23
 
 - New rule `graphify.md` (all three versions): when a project has a graphify knowledge graph (`graphify-out/graph.json`), the AI asks the graph first (`graphify query`, `path`, `explain`, `affected`) and opens source files only for the lines the answer points to. It does nothing until a graph exists, and asks you before it builds one.

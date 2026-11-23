@@ -45,5 +45,8 @@ Up
 Sleep 700ms
 Enter
 
-# Download, progress bar, summary.
-Sleep 6s
+# Download, progress bar, summary, then graphify asks first. No is the default.
+Wait+Screen@30s /Install the official graphify/
+Sleep 2.5s
+Enter
+Sleep 4s
