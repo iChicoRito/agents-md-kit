@@ -154,7 +154,9 @@ fi
 main="CLAUDE.md"; [ "$choice" = agents ] && main="AGENTS.md"
 say ""
 say "  ${B}Next steps${N}"
-say "    1. Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N}"
+case "$choice" in claude) anchor="claude-code-only-claude" ;; agents) anchor="codex-or-other-agents-agents" ;; both) anchor="both-both" ;; esac
+say "    1. Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N}. Copy this prompt for your AI:"
+say "       ${C}https://github.com/iChicoRito/agents-md-kit/blob/main/PROMPTS.md#$anchor${N}"
 say "    2. Install the skills: ${B}docs/guides/setup.md${N}"
 if [ "$choice" = agents ]; then
   say "    3. Start your agent and ask it to read ${B}AGENTS.md${N}"

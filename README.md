@@ -115,8 +115,10 @@ docs/              architecture, API, database, guides, decisions
 
 ## After install
 
-1. Fill the `[PLACEHOLDERS]` in the main file (`CLAUDE.md`, or `AGENTS.md` for the `agents` version) and in `docs/`. You can ask your agent:
-   > Fill in the [PLACEHOLDERS] in CLAUDE.md by reading the codebase. Keep the sections and stay under 200 lines. Put architecture, API and database details in docs/.
+1. Fill the `[PLACEHOLDERS]` in the main file (`CLAUDE.md`, or `AGENTS.md` for the `agents` version) and in `docs/`. **Copy the ready prompt for your version from [PROMPTS.md](PROMPTS.md)** and paste it into your AI agent. It reads your code and fills everything in:
+   - [Claude Code only](PROMPTS.md#claude-code-only-claude)
+   - [Codex or other agents](PROMPTS.md#codex-or-other-agents-agents)
+   - [Both](PROMPTS.md#both-both)
 2. In Claude Code, run `/memory` and `/skills` to check what loads.
 
 Using it on an existing project? See [GUIDE.md](GUIDE.md#use-it-on-an-existing-project) for how to merge.

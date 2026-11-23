@@ -122,8 +122,7 @@ In the steps below, "main file" means `CLAUDE.md` (`claude` and `both` versions)
    - Move your existing instructions into the kit's `CLAUDE.md` layout. Keep only short, every-session information.
    - Move long details (architecture, API notes) into the right `docs/` file.
    - Make `AGENTS.md` the short signpost to `CLAUDE.md`.
-3. **Let the AI fill in the placeholders.** It can read your code. Send Claude:
-   > Fill in the [PLACEHOLDERS] in CLAUDE.md by reading the codebase. Keep the sections and stay under 200 lines. Put architecture, API and database details in docs/. Do not copy rules from .claude/rules/ into CLAUDE.md.
+3. **Let the AI fill in the placeholders.** It can read your code. Copy the prompt for your version from [PROMPTS.md](PROMPTS.md) and paste it into your agent. The prompt also merges your old instructions and lists every TODO it could not fill.
 4. **Fill in `docs/` one area at a time.** For example:
    > Read the API code and fill in docs/api/README.md and docs/api/openapi.yaml.
 
