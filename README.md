@@ -56,6 +56,8 @@ curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/insta
 
 No git needed. The installer downloads the template and copies it in.
 
+See all options: add `--help` (Bash) or `-Help` (PowerShell) to the command.
+
 **Safe for existing projects**
 
 - It never overwrites a file. Files that already exist are skipped and listed, so you can merge them by hand.
