@@ -69,6 +69,22 @@ curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/insta
 
 No git needed. The installer downloads the template and copies it in.
 
+**Prefer to read the script before running it?** Good habit. Download it, read it, then run it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.sh -o install.sh
+less install.sh          # read it (q to quit)
+bash install.sh
+```
+
+```powershell
+irm https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.ps1 -OutFile install.ps1
+notepad install.ps1      # read it
+powershell -ExecutionPolicy Bypass -File .\install.ps1
+```
+
+To be sure the script cannot change after you read it, use a release instead of `main`: replace `main` in the URL with a tag such as `v1.2.0`. All tags: [Releases](https://github.com/iChicoRito/agents-md-kit/releases).
+
 See all options: add `--help` (Bash) or `-Help` (PowerShell) to the command, or see [All commands](#all-commands).
 
 Prefer typed answers? Set `AGENTS_MD_KIT_UI=plain` before running. `NO_COLOR=1` turns colors off.
@@ -194,6 +210,7 @@ Bash (Mac, Linux, Git Bash) uses `--option`. PowerShell uses `-Option`. **Option
 | Install into another folder | `... "path/to/project"` | `... "C:\path\to\project"` |
 | Preview only, change nothing | `--dry-run` | `-DryRun` |
 | Add the short command `agents-md-kit` | `--add-command` | `-AddCommand` |
+| List the `[PLACEHOLDERS]` still left | `--check` | `-Check` |
 | Show help | `--help` | `-Help` |
 | Typed answers instead of arrow keys | `AGENTS_MD_KIT_UI=plain` before `bash` | `$env:AGENTS_MD_KIT_UI = "plain"` first |
 | No colors | `NO_COLOR=1` before `bash` | `$env:NO_COLOR = "1"` first |
@@ -250,7 +267,12 @@ Open a new terminal after adding it, then:
 | Install a released version | `agents-md-kit --version 1.0.1` | `agents-md-kit -Version 1.0.1` |
 | Install into another folder | `agents-md-kit --for both "path/to/project"` | `agents-md-kit -For both "C:\path\to\project"` |
 | Preview only, change nothing | `agents-md-kit --dry-run` | `agents-md-kit -DryRun` |
+| List the placeholders still left | `agents-md-kit --check` | `agents-md-kit -Check` |
 | Show help | `agents-md-kit --help` | `agents-md-kit -Help` |
+
+## Contributing
+
+Found a bug or have an idea? Open an [issue](https://github.com/iChicoRito/agents-md-kit/issues/new/choose). Want to change the kit? See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 

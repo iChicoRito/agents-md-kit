@@ -83,6 +83,19 @@ check "add-command: adds to ~/.bashrc" "grep -q '^agents-md-kit()' '$h/.bashrc'"
 check "add-command: second run adds nothing" "HOME='$h' SHELL=/bin/bash install --add-command && [ \"\$(grep -c '^agents-md-kit()' '$h/.bashrc')\" = 1 ]"
 check "add-command: zsh uses ~/.zshrc" "HOME='$h' SHELL=/bin/zsh install --add-command && grep -q '^agents-md-kit()' '$h/.zshrc'"
 
+# --check lists placeholders and exits 1 while some are left
+echo "== check"
+d="$work/check"; mkdir -p "$d"; install --for both --project new --prompt no "$d"
+check "check: fresh install has placeholders (exit 1)" "! install --check '$d'"
+check "check: names CLAUDE.md" "grep -q 'placeholders left' '$work/last.log' && grep -q 'CLAUDE.md' '$work/last.log'"
+check "check: skips the ADR template" "! grep -q '0000-template' '$work/last.log'"
+find "$d" -type f \( -name '*.md' -o -name '*.yaml' \) ! -name '0000-template.md' \
+  -exec sed -i.bak -E 's/\[[A-Z][A-Z0-9 _,.\/:-]+\]([^(]|$)/filled\1/g' {} +
+find "$d" -name '*.bak' -delete
+printf 'See [API](api/README.md).\n' >> "$d/docs/README.md"
+check "check: all filled, links ignored (exit 0)" "install --check '$d' && grep -q 'no placeholders left' '$work/last.log'"
+check "check: empty folder fails" "mkdir -p '$work/empty' && ! install --check '$work/empty'"
+
 # Bad input is refused
 echo "== errors"
 check "unknown --for value fails" "! install --for nope '$work'"

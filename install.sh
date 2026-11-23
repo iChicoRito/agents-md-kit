@@ -15,7 +15,7 @@
 # Exception: an existing .gitignore is kept and only missing lines are added.
 set -euo pipefail
 
-kit_version="1.1.0"   # keep equal to the VERSION file (the tests check this)
+kit_version="1.2.0"   # keep equal to the VERSION file (the tests check this)
 repo="https://github.com/iChicoRito/agents-md-kit"
 archive="$repo/archive/refs/heads/main.tar.gz"
 
@@ -78,13 +78,16 @@ usage() {
     --add-command         add the short command "agents-md-kit" to your shell
                           (~/.zshrc for zsh, otherwise ~/.bashrc), then stop
 
+    --check               list the [PLACEHOLDERS] still left in CLAUDE.md, AGENTS.md
+                          and docs/, then stop (exit code 1 when some are left)
+
   ${D}Options you leave out are asked. Target folder: current folder if not given.${N}
 
 EOF
 }
 
 # ---------- arguments ----------
-choice=""; project=""; prompt=""; update=""; want_version=""; dry=""; add_cmd=""; target="$PWD"
+choice=""; project=""; prompt=""; update=""; want_version=""; dry=""; add_cmd=""; check=""; target="$PWD"
 need_value() { [ "$2" -ge 2 ] || fail "$1 needs a value (see --help)"; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -100,6 +103,7 @@ while [ $# -gt 0 ]; do
     --version=*) want_version="${1#--version=}"; shift ;;
     --dry-run) dry=1; shift ;;
     --add-command) add_cmd=1; shift ;;
+    --check) check=1; shift ;;
     -*) fail "Unknown option: $1 (see --help)" ;;
     *) target="$1"; shift ;;
   esac
@@ -122,6 +126,47 @@ if [ -n "$add_cmd" ]; then
 fi
 [ -d "$target" ] || fail "Target folder not found: $target"
 target="$(cd "$target" && pwd)"
+
+# ---------- --check: list placeholders still left in the kit files, then stop ----------
+# A placeholder is an uppercase word in brackets, like [PROJECT DESCRIPTION].
+# Markdown links ([API](...)) are not placeholders. PROMPT.md and the ADR template
+# (docs/architecture/decisions/0000-template.md) are meant to keep theirs, so they are skipped.
+if [ -n "$check" ]; then
+  scan=()
+  for f in CLAUDE.md AGENTS.md; do [ -f "$target/$f" ] && scan+=("$f"); done
+  if [ -d "$target/docs" ]; then
+    while IFS= read -r -d '' f; do
+      rel="${f#"$target"/}"
+      [ "$rel" = "docs/architecture/decisions/0000-template.md" ] || scan+=("$rel")
+    done < <(find "$target/docs" -type f \( -name '*.md' -o -name '*.yaml' -o -name '*.yml' \) -print0 | sort -z)
+  fi
+  [ ${#scan[@]} -gt 0 ] || fail "No CLAUDE.md, AGENTS.md or docs/ in $target. Install the kit first."
+  total=0; nfiles=0; rows=()
+  for rel in "${scan[@]}"; do
+    found="$(LC_ALL=C grep -oE '\[[A-Z][A-Z0-9 _,./:-]+\]([^(]|$)' "$target/$rel" | LC_ALL=C sed -E 's/^(\[[^]]*\]).*/\1/' || true)"
+    [ -n "$found" ] || continue
+    cnt="$(printf '%s\n' "$found" | wc -l | tr -d ' ')"
+    list="$(printf '%s\n' "$found" | awk '!seen[$0]++' | paste -sd'|' - | sed 's/|/, /g')"
+    [ ${#list} -gt 60 ] && list="${list:0:57}..."
+    total=$((total + cnt)); nfiles=$((nfiles + 1))
+    rows+=("$(printf '%-34s %3s' "$rel" "$cnt")  ${D}$list${N}")
+  done
+  say ""
+  if [ $total -eq 0 ]; then
+    done_line "Check" "no placeholders left" "$(files ${#scan[@]}) checked"
+    say ""
+    exit 0
+  fi
+  done_line "Check" "$total placeholders left" "in $(files $nfiles)"
+  for ((i = 0; i < ${#rows[@]}; i++)); do
+    if [ $i -eq $((${#rows[@]} - 1)) ]; then br="$ELB"; else br="$TEE"; fi
+    say "    ${D}${br}${N} ${rows[i]}"
+  done
+  say ""
+  say "  ${D}Fill them in, or tell your AI:${N} ${B}Read PROMPT.md and do what it says.${N}"
+  say ""
+  exit 1
+fi
 case "$choice" in ""|claude|agents|both) ;; *) fail "Unknown --for value: $choice (use claude, agents or both)" ;; esac
 case "$project" in ""|new|existing) ;; *) fail "Unknown --project value: $project (use new or existing)" ;; esac
 case "$prompt" in ""|yes|no) ;; *) fail "Unknown --prompt value: $prompt (use yes or no)" ;; esac
@@ -485,6 +530,7 @@ if [ "$choice" = agents ]; then
 else
   say "    ${A}3${N}  In Claude Code, run ${B}/memory${N} and ${B}/skills${N} to check what loads"
 fi
+say "    ${D}See which placeholders are left any time: add${N} ${B}--check${N} ${D}to the install command${N}"
 say ""
 say "  ${G}${DOT}${N} ${B}Done.${N} ${D}Guide: $repo/blob/main/GUIDE.md${N}"
 say ""

@@ -82,6 +82,21 @@ try {
     Test-That "add-command: adds to the profile" { (Get-Content $pp) -match '^function agents-md-kit ' }
     Test-That "add-command: second run adds nothing" { (Invoke-Install @("-AddCommand", "-ProfilePath", $pp)) -and @((Get-Content $pp) -match '^function agents-md-kit ').Count -eq 1 }
 
+    "== check"
+    $d = Join-Path $work "check"; New-Item -ItemType Directory $d | Out-Null
+    Invoke-Install @($d, "-For", "both", "-Project", "new", "-Prompt", "no") | Out-Null
+    Test-That "check: runs without error" { Invoke-Install @($d, "-Check") }
+    Test-That "check: fresh install has placeholders" { $script:log -match 'placeholders left' -and $script:log -match 'CLAUDE\.md' }
+    Test-That "check: skips the ADR template" { $script:log -notmatch '0000-template' }
+    $re = [regex]'\[[A-Z][A-Z0-9 _,./:-]+\](?!\()'
+    Get-ChildItem $d -Recurse -File -Include *.md, *.yaml | Where-Object { $_.Name -ne '0000-template.md' } | ForEach-Object {
+        [IO.File]::WriteAllText($_.FullName, $re.Replace([IO.File]::ReadAllText($_.FullName), 'filled'))
+    }
+    Add-Content "$d\docs\README.md" "See [API](api/README.md)."
+    Test-That "check: all filled, links ignored" { (Invoke-Install @($d, "-Check")) -and $script:log -match 'no placeholders left' }
+    $empty = Join-Path $work "empty"; New-Item -ItemType Directory $empty | Out-Null
+    Test-That "check: empty folder fails" { -not (Invoke-Install @($empty, "-Check")) }
+
     "== errors"
     Test-That "unknown -For value fails" { -not (Invoke-Install @($work, "-For", "nope")) }
     Test-That "missing folder fails" { -not (Invoke-Install @((Join-Path $work "does-not-exist"), "-For", "both")) }

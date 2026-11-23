@@ -9,6 +9,13 @@ All notable changes to agents-md-kit. Versions follow [semantic versioning](http
 3. Commit, push, wait for the tests to pass.
 4. Tag and publish: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`.
 
+## 1.2.0 - 2026-11-23
+
+- `--check` / `-Check`: lists the `[PLACEHOLDERS]` still left in `CLAUDE.md`, `AGENTS.md` and `docs/`, file by file. Bash exits with code 1 while some are left, so it also works in scripts and CI.
+- The install summary now mentions `--check`.
+- README: how to read the installer before running it, and how to pin a release.
+- `CONTRIBUTING.md` and GitHub issue forms for bug reports and ideas.
+
 ## 1.1.0 - 2026-11-23
 
 - `--dry-run` / `-DryRun`: shows what would be added, merged or skipped, and changes nothing.

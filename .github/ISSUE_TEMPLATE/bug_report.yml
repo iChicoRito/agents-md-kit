@@ -1,0 +1,56 @@
+name: Bug report
+description: Something in the installer or the template does not work.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for reporting. The details below help find the cause quickly.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Command you ran
+      placeholder: agents-md-kit --for both --update
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Kit version
+      description: Shown in the installer's welcome box, for example v1.2.0.
+      placeholder: v1.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: System
+      options: [Windows, macOS, Linux, Other]
+    validations:
+      required: true
+  - type: dropdown
+    id: shell
+    attributes:
+      label: Terminal
+      options:
+        - Windows PowerShell 5.1
+        - PowerShell 7
+        - Git Bash (mintty)
+        - Git Bash in Windows Terminal
+        - macOS Terminal / iTerm
+        - Linux terminal
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Installer output
+      description: Copy what the installer printed. Remove anything private.
+      render: text

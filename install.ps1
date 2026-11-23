@@ -13,10 +13,10 @@
 # so the Unicode symbols are built from code points.
 #   -Update                    project already has the kit: add missing files, and save the
 #                              newer kit version of changed files as <file>.kit-new
-param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$DryRun, [switch]$AddCommand, [string]$ProfilePath = $PROFILE, [switch]$Help)
+param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$DryRun, [switch]$AddCommand, [string]$ProfilePath = $PROFILE, [switch]$Check, [switch]$Help)
 $ErrorActionPreference = 'Stop'
 
-$kitVersion = "1.1.0"   # keep equal to the VERSION file (the tests check this)
+$kitVersion = "1.2.0"   # keep equal to the VERSION file (the tests check this)
 $repo = "https://github.com/iChicoRito/agents-md-kit"
 $archive = "$repo/archive/refs/heads/main.zip"
 
@@ -98,6 +98,9 @@ if ($Help) {
     Write-Host "    -AddCommand          add the short command ""agents-md-kit"" to your PowerShell"
     Write-Host "                         profile (`$PROFILE), then stop"
     Write-Host ""
+    Write-Host "    -Check               list the [PLACEHOLDERS] still left in CLAUDE.md, AGENTS.md"
+    Write-Host "                         and docs/, then stop"
+    Write-Host ""
     Write-Part "  Options you leave out are asked. Target folder: current folder if not given." Dim -End
     Write-Host ""
     return
@@ -135,6 +138,47 @@ if ($Version) {
 $showVersion = if ($Version) { $Version } else { $kitVersion }
 if (-not (Test-Path $Target -PathType Container)) { Write-Fail "Target folder not found: $Target"; return }
 $Target = (Resolve-Path $Target).Path
+
+# ---------- -Check: list placeholders still left in the kit files, then stop ----------
+# A placeholder is an uppercase word in brackets, like [PROJECT DESCRIPTION].
+# Markdown links ([API](...)) are not placeholders. PROMPT.md and the ADR template
+# (docs/architecture/decisions/0000-template.md) are meant to keep theirs, so they are skipped.
+if ($Check) {
+    $scan = @()
+    foreach ($f in "CLAUDE.md", "AGENTS.md") { if (Test-Path (Join-Path $Target $f) -PathType Leaf) { $scan += $f } }
+    $docs = Join-Path $Target "docs"
+    if (Test-Path $docs -PathType Container) {
+        $scan += @(Get-ChildItem -LiteralPath $docs -Recurse -File -Include *.md, *.yaml, *.yml | Sort-Object FullName |
+            ForEach-Object { $_.FullName.Substring($Target.Length).TrimStart('\', '/') -replace '\\', '/' } |
+            Where-Object { $_ -ne "docs/architecture/decisions/0000-template.md" })
+    }
+    if (-not $scan.Count) { Write-Fail "No CLAUDE.md, AGENTS.md or docs/ in $Target. Install the kit first."; return }
+    $pattern = [regex]'\[[A-Z][A-Z0-9 _,./:-]+\](?!\()'   # case-sensitive by default
+    $total = 0; $rows = @()
+    foreach ($rel in $scan) {
+        $found = @($pattern.Matches([IO.File]::ReadAllText((Join-Path $Target $rel))) | ForEach-Object { $_.Value })
+        if (-not $found.Count) { continue }
+        $list = ($found | Select-Object -Unique) -join ", "
+        if ($list.Length -gt 60) { $list = $list.Substring(0, 57) + "..." }
+        $total += $found.Count
+        $rows += , @($rel, $found.Count, $list)
+    }
+    Write-Host ""
+    if (-not $total) {
+        Write-Done "Check" "no placeholders left" "$(Format-Files $scan.Count) checked"
+        Write-Host ""
+        return
+    }
+    Write-Done "Check" "$total placeholders left" "in $(Format-Files $rows.Count)"
+    for ($i = 0; $i -lt $rows.Count; $i++) {
+        Write-Part ("    " + $(if ($i -eq $rows.Count - 1) { $ELB } else { $TEE }) + " ") Dim
+        Write-Part ("{0,-34} {1,3}  " -f $rows[$i][0], $rows[$i][1]); Write-Part $rows[$i][2] Dim -End
+    }
+    Write-Host ""
+    Write-Part "  Fill them in, or tell your AI: " Dim; Write-Part "Read PROMPT.md and do what it says." Bold -End
+    Write-Host ""
+    return
+}
 
 # Empty folder (ignoring .git) means a new project.
 $detected = if (@(Get-ChildItem -LiteralPath $Target -Force | Where-Object { $_.Name -ne ".git" }).Count -eq 0) { "new" } else { "existing" }
@@ -434,6 +478,7 @@ try {
     } else {
         Write-Part "    3" Accent; Write-Part "  In Claude Code, run "; Write-Part "/memory" Bold; Write-Part " and "; Write-Part "/skills" Bold; Write-Part " to check what loads" -End
     }
+    Write-Part "    See which placeholders are left any time: add " Dim; Write-Part "-Check" Bold; Write-Part " to the install command" Dim -End
     Write-Host ""
     Write-Part "  $DOT " Green; Write-Part "Done." Bold; Write-Part " Guide: $repo/blob/main/GUIDE.md" Dim -End
     Write-Host ""

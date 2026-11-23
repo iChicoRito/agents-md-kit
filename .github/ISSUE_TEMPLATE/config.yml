@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Read the guide first
+    url: https://github.com/iChicoRito/agents-md-kit/blob/main/GUIDE.md
+    about: Plain-English explanation of every file and how to use the kit.
