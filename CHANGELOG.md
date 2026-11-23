@@ -9,6 +9,12 @@ All notable changes to agents-md-kit. Versions follow [semantic versioning](http
 3. Commit, push, wait for the tests to pass.
 4. Tag and publish: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`.
 
+## 1.3.0 - 2026-11-23
+
+- New rule `graphify.md` (all three versions): when a project has a graphify knowledge graph (`graphify-out/graph.json`), the AI asks the graph first (`graphify query`, `path`, `explain`, `affected`) and opens source files only for the lines the answer points to. It does nothing until a graph exists, and asks you before it builds one.
+- `graphify` added to the skills tables, and a "Graphify (optional)" section added to `docs/guides/setup.md` (install, build, keep current).
+- Existing projects: `--update` adds `graphify.md` and saves the changed `CLAUDE.md` / `AGENTS.md` as `.kit-new`.
+
 ## 1.2.0 - 2026-11-23
 
 - `--check` / `-Check`: lists the `[PLACEHOLDERS]` still left in `CLAUDE.md`, `AGENTS.md` and `docs/`, file by file. Bash exits with code 1 while some are left, so it also works in scripts and CI.

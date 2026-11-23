@@ -54,7 +54,7 @@ It does three things:
 A small program that runs after Claude edits a file. If `CLAUDE.md` or `AGENTS.md` goes over 200 lines, it warns Claude to move details elsewhere. It uses Node.js. Without Node.js the check is skipped quietly, so nothing breaks.
 
 **`.claude/rules/`: how the AI must work**
-Six short rule files. Claude Code reads all of them every session. `CLAUDE.md` lists them for other agents.
+Seven short rule files. Claude Code reads all of them every session. `CLAUDE.md` lists them for other agents.
 
 | File | What it tells the AI |
 |---|---|
@@ -64,6 +64,7 @@ Six short rule files. Claude Code reads all of them every session. `CLAUDE.md` l
 | `git.md` | Never commit unless you ask. No AI names in commit messages. |
 | `check-work.md` | Check the work before finishing. Say clearly what was not checked. |
 | `plain-language.md` | Use simple words and short explanations. |
+| `graphify.md` | If the project has a graphify knowledge graph, ask the graph first instead of reading many files. Does nothing until a graph exists. |
 
 **`.claude/skills/`: project skills for Claude Code only**
 It starts empty, with only a `.gitkeep` (an empty file that makes git keep the folder). Claude Code loads skills here automatically. Other agents do not see them. Use it for a skill only Claude needs.

@@ -42,6 +42,9 @@ try {
         Test-That "new: installs without error" { Invoke-Install @($d, "-For", $v, "-Project", "new", "-Prompt", "no") }
         Test-That "new: every kit file is there" { Test-HasAll $v $d $false }
         Test-That "new: no PROMPT.md" { -not (Test-Path "$d\PROMPT.md") }
+        $rulesDir = if ($v -eq "agents") { ".agents/rules" } else { ".claude/rules" }
+        Test-That "new: graphify rule installed" { Test-Path (Join-Path $d "$rulesDir/graphify.md") }
+        Test-That "new: every rule file is listed in $main" { $txt = Get-Content (Join-Path $d $main) -Raw; -not (Get-ChildItem (Join-Path $d $rulesDir) -Filter *.md | Where-Object { -not $txt.Contains("$rulesDir/$($_.Name)") }) }
         Test-That "new: no kit marker file added" { -not (Test-Path "$d\.agents-md-kit") }
         if ($v -eq "claude") { Test-That "new: no .agents folder" { -not (Test-Path "$d\.agents") } }
         if ($v -eq "agents") { Test-That "new: no .claude folder" { -not (Test-Path "$d\.claude") } }

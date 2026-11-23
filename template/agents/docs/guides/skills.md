@@ -14,6 +14,7 @@ The full list. The main rows are also in `.agents/rules/skills.md`, which loads 
 | Feature work that needs an isolated branch | `using-git-worktrees` |
 | Write tests before the code (features and bug fixes) | `test-driven-development` |
 | Any coding task: smallest change that fully solves it | `ponytail` |
+| Question about how the code works or how parts connect (needs a graph, see `graphify.md`) | `graphify` |
 | Throwaway prototype to test an idea or a UI | `prototype` |
 | Stress-test a plan with hard questions | `grilling` |
 | Research a topic from trusted sources into a Markdown file | `research` |

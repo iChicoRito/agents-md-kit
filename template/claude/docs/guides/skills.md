@@ -16,6 +16,7 @@ Plugins listed in `.claude/settings.json` (Superpowers, Ponytail, Caveman, mattp
 | Feature work that needs an isolated branch | `superpowers:using-git-worktrees` |
 | Write tests before the code (features and bug fixes) | `superpowers:test-driven-development` |
 | Any coding task: smallest change that fully solves it | `ponytail:ponytail` |
+| Question about how the code works or how parts connect (needs a graph, see `graphify.md`) | `graphify` |
 | Throwaway prototype to test an idea or a UI | `mattpocock-skills:prototype` |
 | Stress-test a plan with hard questions | `mattpocock-skills:grilling` |
 | Research a topic from trusted sources into a Markdown file | `mattpocock-skills:research` |

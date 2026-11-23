@@ -33,6 +33,9 @@ for v in claude agents both; do
   check "new: installs without error" "install --for $v --project new --prompt no '$d'"
   check "new: every kit file is there" "has_all $v '$d' no"
   check "new: no PROMPT.md" "[ ! -e '$d/PROMPT.md' ]"
+  rules_dir=.claude/rules; [ $v = agents ] && rules_dir=.agents/rules
+  check "new: graphify rule installed" "[ -e '$d/$rules_dir/graphify.md' ]"
+  check "new: every rule file is listed in $main" "for r in '$d/$rules_dir'/*.md; do grep -qF \"$rules_dir/\$(basename \"\$r\")\" '$d/$main' || { echo \"       not listed: \$r\"; exit 1; }; done"
   check "new: no kit marker file added" "[ ! -e '$d/.agents-md-kit' ]"
   [ $v = claude ] && check "new: no .agents folder" "[ ! -e '$d/.agents' ]"
   [ $v = agents ] && check "new: no .claude folder" "[ ! -e '$d/.claude' ]"
