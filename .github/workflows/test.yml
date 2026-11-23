@@ -35,14 +35,14 @@ jobs:
         run: bash tests/test.sh
 
   powershell:
-    name: ${{ matrix.shell }} on Windows
-    strategy:
-      fail-fast: false
-      matrix:
-        shell: [powershell, pwsh]
+    name: PowerShell on Windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install tests
-        shell: ${{ matrix.shell }}
+      - name: Install tests (Windows PowerShell 5.1)
+        shell: powershell
+        run: ./tests/test.ps1
+      - name: Install tests (PowerShell 7)
+        if: always()
+        shell: pwsh
         run: ./tests/test.ps1
