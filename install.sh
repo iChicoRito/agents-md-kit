@@ -15,8 +15,10 @@
 # Exception: an existing .gitignore is kept and only missing lines are added.
 set -euo pipefail
 
-archive="https://github.com/iChicoRito/agents-md-kit/archive/refs/heads/main.tar.gz"
+kit_version="1.0.0"   # keep equal to the VERSION file (the tests check this)
 repo="https://github.com/iChicoRito/agents-md-kit"
+archive="$repo/archive/refs/heads/main.tar.gz"
+marker=".agents-md-kit"   # small file in the project: which kit version and variant it has
 
 # ---------- output style ----------
 # ansi: a real terminal that understands cursor codes (needed for menus).
@@ -69,13 +71,16 @@ usage() {
     --update              the project already has the kit: add missing files, and
                           save the newer kit version of changed files as <file>.kit-new
 
+    --version 1.0.0       install that released version instead of the latest
+                          (list: $repo/releases)
+
   ${D}Options you leave out are asked. Target folder: current folder if not given.${N}
 
 EOF
 }
 
 # ---------- arguments ----------
-choice=""; project=""; prompt=""; update=""; target="$PWD"
+choice=""; project=""; prompt=""; update=""; want_version=""; target="$PWD"
 need_value() { [ "$2" -ge 2 ] || fail "$1 needs a value (see --help)"; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -87,6 +92,8 @@ while [ $# -gt 0 ]; do
     --prompt) need_value "$1" $#; prompt="$2"; shift 2 ;;
     --prompt=*) prompt="${1#--prompt=}"; shift ;;
     --update) update=1; shift ;;
+    --version) need_value "$1" $#; want_version="$2"; shift 2 ;;
+    --version=*) want_version="${1#--version=}"; shift ;;
     -*) fail "Unknown option: $1 (see --help)" ;;
     *) target="$1"; shift ;;
   esac
@@ -96,6 +103,15 @@ target="$(cd "$target" && pwd)"
 case "$choice" in ""|claude|agents|both) ;; *) fail "Unknown --for value: $choice (use claude, agents or both)" ;; esac
 case "$project" in ""|new|existing) ;; *) fail "Unknown --project value: $project (use new or existing)" ;; esac
 case "$prompt" in ""|yes|no) ;; *) fail "Unknown --prompt value: $prompt (use yes or no)" ;; esac
+# A pinned version downloads that release; "1.0.0" and "v1.0.0" both work.
+want_version="${want_version#v}"
+if [ -n "$want_version" ]; then
+  case "$want_version" in
+    *[!0-9.]*|.*|*.|*..*) fail "Unknown --version value: $want_version (use a release number like 1.0.0)" ;;
+  esac
+  archive="$repo/archive/refs/tags/v$want_version.tar.gz"
+fi
+show_version="${want_version:-$kit_version}"
 
 # Empty folder (ignoring .git) means a new project.
 detected=existing
@@ -104,6 +120,14 @@ detected=existing
 installed=3
 [ -d "$target/.claude" ] && [ ! -d "$target/.agents" ] && installed=1
 [ ! -d "$target/.claude" ] && [ -d "$target/.agents" ] && installed=2
+# The marker file, when present, knows better than the folders.
+old_version=""
+if [ -f "$target/$marker" ]; then
+  old_version="$(sed -n 's/^version=//p' "$target/$marker" | tr -d '\r' | head -1)"
+  case "$(sed -n 's/^for=//p' "$target/$marker" | tr -d '\r' | head -1)" in
+    claude) installed=1 ;; agents) installed=2 ;; both) installed=3 ;;
+  esac
+fi
 if [ -n "$update" ]; then
   project=existing
   if [ -z "$prompt" ]; then if [ -e "$target/PROMPT.md" ]; then prompt=yes; else prompt=no; fi; fi
@@ -221,7 +245,9 @@ ask() {
 w=50
 say ""
 say "  ${A}${TL}$(rule $w)${TR}${N}"
-printf '  %s%s%s %s%s%s %sWelcome to agents-md-kit%s%*s%s%s%s\n' "$A" "$V" "$N" "$A" "$STAR" "$N" "$B" "$N" $((w - 27)) "" "$A" "$V" "$N"
+vtext="v$show_version"
+printf '  %s%s%s %s%s%s %sWelcome to agents-md-kit%s %s%s%s%*s%s%s%s\n' "$A" "$V" "$N" "$A" "$STAR" "$N" "$B" "$N" "$D" "$vtext" "$N" \
+  $((w - 28 - ${#vtext})) "" "$A" "$V" "$N"
 printf '  %s%s%s%*s%s%s%s\n' "$A" "$V" "$N" $w "" "$A" "$V" "$N"
 printf '  %s%s%s   %sAI agent setup for Claude Code and Codex%s%*s%s%s%s\n' "$A" "$V" "$N" "$D" "$N" $((w - 43)) "" "$A" "$V" "$N"
 say "  ${A}${BL}$(rule $w)${BR}${N}"
@@ -296,17 +322,21 @@ if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fi
 say ""
-if [ -n "$script_dir" ] && [ -d "$script_dir/template/$choice" ]; then
+if [ -z "$want_version" ] && [ -n "$script_dir" ] && [ -d "$script_dir/template/$choice" ]; then
   template="$script_dir/template/$choice"
   done_line "Template" "local copy"
 else
   tmp="$(mktemp -d)"
   ( curl -fsSL "$archive" | tar -xz -C "$tmp" ) & dl=$!
   spin "Downloading template from GitHub" "$dl"
-  wait "$dl" || fail "Could not download the template. Check your internet connection."
+  if ! wait "$dl"; then
+    [ -n "$want_version" ] && fail "Version $want_version not found. See $repo/releases"
+    fail "Could not download the template. Check your internet connection."
+  fi
   template="$(find "$tmp" -mindepth 3 -maxdepth 3 -type d -path "*/template/$choice" | head -1)"
   [ -d "$template" ] || fail "Download incomplete: template/$choice not found"
-  done_line "Template" "downloaded" "latest from GitHub"
+  if [ -n "$want_version" ]; then done_line "Template" "downloaded" "release v$want_version"
+  else done_line "Template" "downloaded" "latest from GitHub"; fi
 fi
 
 # ---------- copy ----------
@@ -352,7 +382,15 @@ done
 progress "${#todo[@]}" "${#todo[@]}"
 [ -n "$ansi" ] && printf '\r\033[2K\033[?25h'
 
+# Record which kit version and variant the project has (read by --update next time).
+printf '# agents-md-kit: kit version and variant of this project. Used by --update. Safe to commit.\nversion=%s\nfor=%s\n' \
+  "$show_version" "$choice" > "$target/$marker"
+
 # ---------- result: a small tree of what changed ----------
+version_note="recorded in $marker"
+if [ -n "$old_version" ] && [ "$old_version" != "$show_version" ]; then version_note="was v$old_version"
+elif [ -n "$old_version" ]; then version_note="unchanged"; fi
+done_line "Version" "v$show_version" "$version_note"
 done_line "Copied" "$(files "$copied")"
 rows=()   # each row: "<text>" already colored
 if [ $copied -gt 0 ]; then

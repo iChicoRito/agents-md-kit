@@ -13,11 +13,13 @@
 # so the Unicode symbols are built from code points.
 #   -Update                    project already has the kit: add missing files, and save the
 #                              newer kit version of changed files as <file>.kit-new
-param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [switch]$Help)
+param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$Help)
 $ErrorActionPreference = 'Stop'
 
-$archive = "https://github.com/iChicoRito/agents-md-kit/archive/refs/heads/main.zip"
+$kitVersion = "1.0.0"   # keep equal to the VERSION file (the tests check this)
 $repo = "https://github.com/iChicoRito/agents-md-kit"
+$archive = "$repo/archive/refs/heads/main.zip"
+$marker = ".agents-md-kit"   # small file in the project: which kit version and variant it has
 
 # ---------- output style ----------
 # A terminal with ANSI support (Windows Terminal, Windows 10+ console) gets the full look.
@@ -89,6 +91,9 @@ if ($Help) {
     Write-Host "    -Update              the project already has the kit: add missing files, and"
     Write-Host "                         save the newer kit version of changed files as <file>.kit-new"
     Write-Host ""
+    Write-Host "    -Version 1.0.0       install that released version instead of the latest"
+    Write-Host "                         (list: $repo/releases)"
+    Write-Host ""
     Write-Part "  Options you leave out are asked. Target folder: current folder if not given." Dim -End
     Write-Host ""
     return
@@ -97,6 +102,13 @@ if ($Help) {
 if ($For -and $For -notin @("claude", "agents", "both")) { Write-Fail "Unknown -For value: $For (use claude, agents or both)"; return }
 if ($Project -and $Project -notin @("new", "existing")) { Write-Fail "Unknown -Project value: $Project (use new or existing)"; return }
 if ($Prompt -and $Prompt -notin @("yes", "no")) { Write-Fail "Unknown -Prompt value: $Prompt (use yes or no)"; return }
+# A pinned version downloads that release; "1.0.0" and "v1.0.0" both work.
+$Version = $Version -replace '^v', ''
+if ($Version) {
+    if ($Version -notmatch '^\d+(\.\d+)*$') { Write-Fail "Unknown -Version value: $Version (use a release number like 1.0.0)"; return }
+    $archive = "$repo/archive/refs/tags/v$Version.zip"
+}
+$showVersion = if ($Version) { $Version } else { $kitVersion }
 if (-not (Test-Path $Target -PathType Container)) { Write-Fail "Target folder not found: $Target"; return }
 $Target = (Resolve-Path $Target).Path
 
@@ -105,6 +117,15 @@ $detected = if (@(Get-ChildItem -LiteralPath $Target -Force | Where-Object { $_.
 # Update mode: guess the installed version from the folders, and keep PROMPT.md as it was.
 $hasClaude = Test-Path (Join-Path $Target ".claude"); $hasAgents = Test-Path (Join-Path $Target ".agents")
 $installed = if ($hasClaude -and -not $hasAgents) { 1 } elseif ($hasAgents -and -not $hasClaude) { 2 } else { 3 }
+# The marker file, when present, knows better than the folders.
+$oldVersion = ""
+$markerPath = Join-Path $Target $marker
+if (Test-Path $markerPath -PathType Leaf) {
+    $lines = @(Get-Content -LiteralPath $markerPath)
+    $oldVersion = ($lines | Where-Object { $_ -like 'version=*' } | Select-Object -First 1) -replace '^version=', ''
+    $markFor = ($lines | Where-Object { $_ -like 'for=*' } | Select-Object -First 1) -replace '^for=', ''
+    if ($markFor -in "claude", "agents", "both") { $installed = @{ claude = 1; agents = 2; both = 3 }[$markFor] }
+}
 if ($Update) {
     $Project = "existing"
     if (-not $Prompt) { $Prompt = if (Test-Path (Join-Path $Target "PROMPT.md")) { "yes" } else { "no" } }
@@ -175,7 +196,8 @@ $showTarget = $Target
 if ($HOME -and $Target.StartsWith($HOME, [StringComparison]::OrdinalIgnoreCase)) { $showTarget = "~" + $Target.Substring($HOME.Length) }
 Write-Host ""
 Write-Part ("  $TL" + ($H * $w) + $TR) Accent -End
-Write-Part "  $V " Accent; Write-Part $STAR Accent; Write-Part " "; Write-Part "Welcome to agents-md-kit" Bold; Write-Part (" " * ($w - 27)); Write-Part $V Accent -End
+Write-Part "  $V " Accent; Write-Part $STAR Accent; Write-Part " "; Write-Part "Welcome to agents-md-kit" Bold; Write-Part " v$showVersion" Dim
+Write-Part (" " * ($w - 28 - "v$showVersion".Length)); Write-Part $V Accent -End
 Write-Part "  $V" Accent; Write-Part (" " * $w); Write-Part $V Accent -End
 Write-Part "  $V" Accent; Write-Part "   "; Write-Part "AI agent setup for Claude Code and Codex" Dim; Write-Part (" " * ($w - 43)); Write-Part $V Accent -End
 Write-Part ("  $BL" + ($H * $w) + $BR) Accent -End
@@ -238,7 +260,7 @@ Write-Done "PROMPT.md" $Prompt $promptNote
 $tmp = $null
 try {
     Write-Host ""
-    if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "template\$For"))) {
+    if (-not $Version -and $PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "template\$For"))) {
         $Template = Join-Path $PSScriptRoot "template\$For"
         Write-Done "Template" "local copy"
     } else {
@@ -265,12 +287,13 @@ try {
             [IO.Compression.ZipFile]::ExtractToDirectory("$tmp\kit.zip", $tmp)
         } catch {
             if ($vt) { Write-Host "`r$E[2K" -NoNewline; try { [Console]::CursorVisible = $true } catch {} }
+            if ($Version) { Write-Fail "Version $Version not found. See $repo/releases"; return }
             Write-Fail "Could not download the template. Check your internet connection."; return
         }
         $Template = (Get-ChildItem -Path $tmp -Directory | ForEach-Object { Join-Path $_.FullName "template\$For" } |
             Where-Object { Test-Path $_ } | Select-Object -First 1)
         if (-not $Template) { Write-Fail "Download incomplete: template\$For not found"; return }
-        Write-Done "Template" "downloaded" "latest from GitHub"
+        if ($Version) { Write-Done "Template" "downloaded" "release v$Version" } else { Write-Done "Template" "downloaded" "latest from GitHub" }
     }
 
     # ---------- copy ----------
@@ -316,7 +339,12 @@ try {
     Write-Progress-Bar $todo.Count $todo.Count
     if ($vt) { Write-Host "`r$E[2K" -NoNewline; try { [Console]::CursorVisible = $true } catch {} }
 
+    # Record which kit version and variant the project has (read by -Update next time).
+    [IO.File]::WriteAllText($markerPath, "# agents-md-kit: kit version and variant of this project. Used by --update. Safe to commit.`nversion=$showVersion`nfor=$For`n")
+
     # ---------- result: a small tree of what changed ----------
+    $versionNote = if ($oldVersion -and $oldVersion -ne $showVersion) { "was v$oldVersion" } elseif ($oldVersion) { "unchanged" } else { "recorded in $marker" }
+    Write-Done "Version" "v$showVersion" $versionNote
     Write-Done "Copied" (Format-Files $copied)
     $rows = @()   # each row: list of @(text, style) parts
     $added | Group-Object { $p = $_ -split '[\\/]'; if ($p.Count -gt 1) { $p[0] + "/" } else { $p[0] } } | Sort-Object Name | ForEach-Object {

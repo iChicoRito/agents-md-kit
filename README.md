@@ -94,6 +94,20 @@ curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/insta
 - Merge what you want from each `.kit-new` file, then delete it. Or tell your AI: *Merge every \*.kit-new file into the file next to it. Keep my project details. Then delete the .kit-new files.*
 - `*.kit-new` is in the kit's `.gitignore`, so these files are not committed by mistake.
 
+**Install a fixed version**
+
+Each install records its kit version in a small `.agents-md-kit` file, and the installer shows the version in its welcome box. To install a released version instead of the latest, add `--version` (Bash) or `-Version` (PowerShell):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.sh | bash -s -- --version 1.0.0
+```
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.ps1))) -Version 1.0.0
+```
+
+All versions and what changed: [Releases](https://github.com/iChicoRito/agents-md-kit/releases) and [CHANGELOG.md](CHANGELOG.md).
+
 ## What you get
 
 **`claude`: Claude Code only**
@@ -141,7 +155,7 @@ docs/              architecture, API, database, guides, decisions
 ## Requirements
 
 - Claude Code, Codex, or both.
-- Node.js, for `npx skills add` (and for the line-limit hook in Claude Code).
+- Node.js, for `npx skills add`. The line-limit hook in Claude Code also uses it, and is skipped quietly without it.
 - Skills. See `docs/guides/setup.md` after install:
   - `claude` and `both`: six plugins (Superpowers, Ponytail, Caveman, mattpocock-skills, ux-ui-agent-skills, unslop-ui) install when you open the project in Claude Code. The Caveman skills and design skills are installed by hand with `npx skills add`.
   - `agents`: all skills are installed with `npx skills add`.

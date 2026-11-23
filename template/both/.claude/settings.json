@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-claude-md.js\"",
+            "command": "command -v node >/dev/null 2>&1 || exit 0; node \"$CLAUDE_PROJECT_DIR/.claude/hooks/check-claude-md.js\"",
             "timeout": 10
           }
         ]

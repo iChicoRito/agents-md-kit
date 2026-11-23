@@ -31,6 +31,9 @@ function Get-Snapshot([string]$Dir) {
 }
 
 try {
+    $version = (Get-Content (Join-Path $kit "VERSION") -Raw).Trim()
+    "== version $version"
+    Test-That "install.ps1 version matches VERSION" { (Get-Content (Join-Path $kit "install.ps1")) -contains ('$kitVersion = "' + $version + '"   # keep equal to the VERSION file (the tests check this)') }
     foreach ($v in "claude", "agents", "both") {
         "== $v"
         $main = if ($v -eq "agents") { "AGENTS.md" } else { "CLAUDE.md" }
@@ -39,6 +42,7 @@ try {
         Test-That "new: installs without error" { Invoke-Install @($d, "-For", $v, "-Project", "new", "-Prompt", "no") }
         Test-That "new: every kit file is there" { Test-HasAll $v $d $false }
         Test-That "new: no PROMPT.md" { -not (Test-Path "$d\PROMPT.md") }
+        Test-That "new: version marker written" { $m = Get-Content "$d\.agents-md-kit"; ($m -contains "version=$version") -and ($m -contains "for=$v") }
         if ($v -eq "claude") { Test-That "new: no .agents folder" { -not (Test-Path "$d\.agents") } }
         if ($v -eq "agents") { Test-That "new: no .claude folder" { -not (Test-Path "$d\.claude") } }
 
@@ -58,6 +62,8 @@ try {
         $d = Join-Path $work "$v-update"; New-Item -ItemType Directory $d | Out-Null
         Invoke-Install @($d, "-For", $v, "-Project", "new", "-Prompt", "no") | Out-Null
         Add-Content "$d\$main" "# my notes"; Remove-Item "$d\docs\glossary.md"
+        # The marker must win over the folders: without .agents, a folder guess would say "claude".
+        if ($v -eq "both") { Remove-Item -Recurse -Force "$d\.agents" }
         Test-That "update: runs without error" { Invoke-Install @($d, "-Update") }
         Test-That "update: detects version $v" { $script:log -match "Agents\s+$v" }
         Test-That "update: deleted file restored" { Test-Path "$d\docs\glossary.md" }
@@ -69,6 +75,7 @@ try {
     "== errors"
     Test-That "unknown -For value fails" { -not (Invoke-Install @($work, "-For", "nope")) }
     Test-That "missing folder fails" { -not (Invoke-Install @((Join-Path $work "does-not-exist"), "-For", "both")) }
+    Test-That "bad -Version value fails" { -not (Invoke-Install @($work, "-Version", "abc")) }
 } finally {
     Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }

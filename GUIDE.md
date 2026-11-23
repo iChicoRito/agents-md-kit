@@ -40,7 +40,10 @@ It keeps two personal files out of git:
 - `.claude/settings.local.json`: your own Claude settings
 - `CLAUDE.local.md`: your own private notes for Claude
 
-These stay on your computer and are never shared.
+These stay on your computer and are never shared. It also leaves out `*.kit-new` files, which only exist while you merge an update.
+
+**`.agents-md-kit`: the kit version**
+A tiny file the installer writes. It says which kit version and which variant (claude, agents or both) the project has. The update mode reads it. Safe to commit. Do not edit it by hand.
 
 ### The `.claude/` folder: AI settings and rules
 
@@ -51,7 +54,7 @@ It does three things:
 3. Turns on the line checker below.
 
 **`.claude/hooks/check-claude-md.js`: the line checker**
-A small program that runs after Claude edits a file. If `CLAUDE.md` or `AGENTS.md` goes over 200 lines, it warns Claude to move details elsewhere. It needs Node.js.
+A small program that runs after Claude edits a file. If `CLAUDE.md` or `AGENTS.md` goes over 200 lines, it warns Claude to move details elsewhere. It uses Node.js. Without Node.js the check is skipped quietly, so nothing breaks.
 
 **`.claude/rules/`: how the AI must work**
 Six short rule files. Claude Code reads all of them every session. `CLAUDE.md` lists them for other agents.

@@ -19,6 +19,11 @@ has_all() {
 }
 snapshot() { (cd "$1" && find . -type f -exec cksum {} + | sort); }
 
+version="$(tr -d '\r\n' < "$kit/VERSION")"
+echo "== version $version"
+check "install.sh version matches VERSION" "grep -qx 'kit_version=\"$version\".*' '$kit/install.sh'"
+check "install.ps1 version matches VERSION" "grep -q '^\$kitVersion = \"$version\"' '$kit/install.ps1'"
+
 for v in claude agents both; do
   echo "== $v"
   main=CLAUDE.md; [ $v = agents ] && main=AGENTS.md
@@ -28,6 +33,7 @@ for v in claude agents both; do
   check "new: installs without error" "install --for $v --project new --prompt no '$d'"
   check "new: every kit file is there" "has_all $v '$d' no"
   check "new: no PROMPT.md" "[ ! -e '$d/PROMPT.md' ]"
+  check "new: version marker written" "grep -qx 'version=$version' '$d/.agents-md-kit' && grep -qx 'for=$v' '$d/.agents-md-kit'"
   [ $v = claude ] && check "new: no .agents folder" "[ ! -e '$d/.agents' ]"
   [ $v = agents ] && check "new: no .claude folder" "[ ! -e '$d/.claude' ]"
 
@@ -52,6 +58,8 @@ for v in claude agents both; do
   d="$work/$v-update"; mkdir -p "$d"
   install --for $v --project new --prompt no "$d"
   echo "# my notes" >> "$d/$main"; rm "$d/docs/glossary.md"
+  # The marker must win over the folders: without .agents, a folder guess would say "claude".
+  [ $v = both ] && rm -rf "$d/.agents"
   check "update: runs without error" "install --update '$d'"
   check "update: detects version $v" "grep -q \"Agents *$v\" '$work/last.log'"
   check "update: deleted file restored" "[ -e '$d/docs/glossary.md' ]"
@@ -65,6 +73,7 @@ done
 echo "== errors"
 check "unknown --for value fails" "! install --for nope '$work'"
 check "missing folder fails" "! install --for both '$work/does-not-exist'"
+check "bad --version value fails" "! install --version abc '$work'"
 
 echo ""
 echo "$((n - fails))/$n passed"
