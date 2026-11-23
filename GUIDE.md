@@ -60,7 +60,7 @@ Six short rule files. Claude Code reads all of them every session. `CLAUDE.md` l
 |---|---|
 | `plan-before-bigger-tasks.md` | For anything bigger than a small fix: understand the goal, write a short plan, then build. |
 | `keep-it-simple.md` | Do only what was asked. Make the smallest change that works. Do not touch unrelated code. |
-| `skills-and-plugins.md` | Which skill to use for which job (debugging, reviews, design and more), and where skills come from. |
+| `skills-and-plugins.md` | The main skills for common jobs (planning, debugging, reviews, design) and where skills come from. Kept short, because it loads every session. The full list is in `docs/guides/skills.md`. |
 | `git.md` | Never commit unless you ask. No AI names in commit messages. |
 | `check-work.md` | Check the work before finishing. Say clearly what was not checked. |
 | `plain-language.md` | Use simple words and short explanations. |
@@ -90,6 +90,7 @@ The AI does not read these every session. It opens one when a task needs it, so 
 | `docs/api/openapi.yaml` | The exact list of API endpoints. Tools can read it. It is the official source. Starts empty. |
 | `docs/database/schema.md` | Your tables, how they relate, and rules for changing them. |
 | `docs/guides/setup.md` | How to run the project locally, and how to install the AI skills. |
+| `docs/guides/skills.md` | The full list of which skill to use for which task. The AI opens it only when the short list in the rules does not fit. |
 | `docs/guides/testing.md` | How to run and write tests. |
 | `docs/guides/deploy.md` | How to release the project. |
 | `docs/glossary.md` | Words specific to your project and what they mean. |

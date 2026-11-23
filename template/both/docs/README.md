@@ -16,6 +16,7 @@ Map of all project docs. One line per doc. Add a line when you add a doc.
 
 ## Guides
 - [Setup](guides/setup.md): run the project locally
+- [Skills](guides/skills.md): which skill to use for which task
 - [Testing](guides/testing.md): run and write tests
 - [Deploy](guides/deploy.md): release steps
 
