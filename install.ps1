@@ -11,7 +11,9 @@
 # Exception: an existing .gitignore is kept and only missing lines are added.
 # This file is plain ASCII on purpose (Windows PowerShell 5.1 misreads UTF-8 files without a BOM),
 # so the Unicode symbols are built from code points.
-param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Help)
+#   -Update                    project already has the kit: add missing files, and save the
+#                              newer kit version of changed files as <file>.kit-new
+param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [switch]$Help)
 $ErrorActionPreference = 'Stop'
 
 $archive = "https://github.com/iChicoRito/agents-md-kit/archive/refs/heads/main.zip"
@@ -83,6 +85,9 @@ if ($Help) {
     Write-Host "    -Prompt yes|no       add PROMPT.md, the prompt that makes your AI fill"
     Write-Host "                         the placeholders (existing: always added; new: default no)"
     Write-Host ""
+    Write-Host "    -Update              the project already has the kit: add missing files, and"
+    Write-Host "                         save the newer kit version of changed files as <file>.kit-new"
+    Write-Host ""
     Write-Part "  Options you leave out are asked. Target folder: current folder if not given." Dim -End
     Write-Host ""
     return
@@ -96,6 +101,13 @@ $Target = (Resolve-Path $Target).Path
 
 # Empty folder (ignoring .git) means a new project.
 $detected = if (@(Get-ChildItem -LiteralPath $Target -Force | Where-Object { $_.Name -ne ".git" }).Count -eq 0) { "new" } else { "existing" }
+# Update mode: guess the installed version from the folders, and keep PROMPT.md as it was.
+$hasClaude = Test-Path (Join-Path $Target ".claude"); $hasAgents = Test-Path (Join-Path $Target ".agents")
+$installed = if ($hasClaude -and -not $hasAgents) { 1 } elseif ($hasAgents -and -not $hasClaude) { 2 } else { 3 }
+if ($Update) {
+    $Project = "existing"
+    if (-not $Prompt) { $Prompt = if (Test-Path (Join-Path $Target "PROMPT.md")) { "yes" } else { "no" } }
+}
 $canAsk = [Environment]::UserInteractive -and -not [Console]::IsInputRedirected
 $menus = $canAsk -and $vt -and $env:AGENTS_MD_KIT_UI -ne "plain"
 
@@ -168,18 +180,21 @@ Write-Part "  $V" Accent; Write-Part "   "; Write-Part "AI agent setup for Claud
 Write-Part ("  $BL" + ($H * $w) + $BR) Accent -End
 Write-Host ""
 Write-Part "  Folder: $showTarget" Dim -End
+if ($Update) { Write-Part "  Update mode: " Accent; Write-Part "missing files are added; newer kit files are saved as *.kit-new" Dim -End }
 if ($menus) { Write-Part "  Pick with arrow keys. Nothing is overwritten." Dim -End } else { Write-Part "  Nothing is overwritten." Dim -End }
 if (-not ($canAsk -and -not $menus)) { Write-Host "" }   # typed questions bring their own blank line
 
 # ---------- questions (only when someone can answer) ----------
 if (-not $For) {
     if ($canAsk) {
-        $a = Select-Option "Which AI agents will you use in this project?" 3 @(
+        $def = if ($Update) { $installed } else { 3 }
+        $a = Select-Option "Which AI agents will you use in this project?" $def @(
             "Claude Code only|CLAUDE.md + .claude/",
             "Codex / other agents|AGENTS.md + .agents/",
             "Both (recommended)|CLAUDE.md + AGENTS.md + both folders")
         $For = @{ 1 = "claude"; 2 = "agents"; 3 = "both" }[$a]
-    } else { $For = "both" }
+    } elseif ($Update) { $For = @{ 1 = "claude"; 2 = "agents"; 3 = "both" }[$installed] }
+    else { $For = "both" }
 }
 $label = @{ claude = "Claude Code only"; agents = "Codex / other agents"; both = "Claude Code + Codex" }[$For]
 Write-Done "Agents" $For $label
@@ -196,7 +211,9 @@ if (-not $Project) {
 Write-Done "Project" $Project
 
 $promptNote = ""
-if ($Project -eq "existing") {
+if ($Update) {
+    $promptNote = "kept as it was"
+} elseif ($Project -eq "existing") {
     if ($Prompt -eq "no") { $promptNote = "always added for existing projects" }
     $Prompt = "yes"
 } elseif (-not $Prompt) {
@@ -256,7 +273,7 @@ try {
     }
 
     # ---------- copy ----------
-    $copied = 0; $added = @(); $skipped = @(); $gitignoreAdded = $null
+    $copied = 0; $same = 0; $added = @(); $skipped = @(); $newer = @(); $gitignoreAdded = $null
     $todo = @(Get-ChildItem -Path $Template -Recurse -Force -File | Sort-Object FullName |
         Where-Object { -not ($Prompt -eq 'no' -and $_.FullName.Substring($Template.Length).TrimStart('\', '/') -eq 'PROMPT.md') })
     if ($vt) { try { [Console]::CursorVisible = $false } catch {} }
@@ -279,7 +296,15 @@ try {
             $gitignoreAdded = $missing
             continue
         }
-        if (Test-Path $dest) { $skipped += $rel; continue }
+        if (Test-Path $dest) {
+            if ($Update -and (Test-Path $dest -PathType Leaf)) {
+                # Same content (line endings ignored): nothing to do. Different: save the kit's version beside it.
+                $kitText = [IO.File]::ReadAllText($file.FullName) -replace "`r", ""
+                $yourText = [IO.File]::ReadAllText($dest) -replace "`r", ""
+                if ($kitText -ceq $yourText) { $same++ } else { Copy-Item -LiteralPath $file.FullName -Destination "$dest.kit-new" -Force; $newer += $rel }
+            } else { $skipped += $rel }
+            continue
+        }
         New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
         Copy-Item -LiteralPath $file.FullName -Destination $dest
         $copied++; $added += $rel
@@ -299,6 +324,8 @@ try {
         else { $rows += , @(@("= .gitignore   kept, nothing to add", "Dim")) }
     }
     foreach ($s in $skipped) { $rows += , @(@("! ", "Yellow"), @($s.PadRight(13), ""), @("already existed, left untouched", "Yellow")) }
+    foreach ($s in $newer) { $rows += , @(@("$UP ", "Accent"), @($s.PadRight(13), ""), @("newer kit version saved as $s.kit-new", "Accent")) }
+    if ($same) { $rows += , @(@("= $(Format-Files $same) already up to date", "Dim")) }
     for ($i = 0; $i -lt $rows.Count; $i++) {
         Write-Part ("    " + $(if ($i -eq $rows.Count - 1) { $ELB } else { $TEE }) + " ") Dim
         foreach ($part in $rows[$i]) { Write-Part $part[0] $part[1] }
@@ -313,6 +340,20 @@ try {
     Write-Host ""
     Write-Part "  $STAR " Accent; Write-Part "Next steps" Bold -End
     Write-Host ""
+    if ($Update) {
+        if ($newer.Count) {
+            Write-Part "    1" Accent; Write-Part "  Merge each "; Write-Part "*.kit-new" Bold; Write-Part " file into the file next to it, then delete the .kit-new. Or tell your AI:" -End
+            Write-Part "       $PTR " Accent; Write-Part "Merge every *.kit-new file into the file next to it. Keep my project details. Then delete the .kit-new files." Bold -End
+        } else {
+            Write-Part "    1" Accent; Write-Part "  Nothing to merge. Your kit files match the latest version." -End
+        }
+        Write-Part "    2" Accent; Write-Part "  New skills or plugins? Check "; Write-Part "docs/guides/setup.md" Bold -End
+        Write-Host ""
+        Write-Part "  $DOT " Green; Write-Part "Done." Bold; Write-Part " Guide: $repo/blob/main/GUIDE.md" Dim -End
+        Write-Host ""
+        $state.done = $true
+        return
+    }
     Write-Part "    1" Accent; Write-Part "  Fill the [PLACEHOLDERS] in "; Write-Part $main Bold; Write-Part " and "; Write-Part "docs/" Bold
     if ($Prompt -eq "yes" -and $skipped -contains "PROMPT.md") {
         Write-Part "." -End

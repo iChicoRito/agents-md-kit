@@ -8,6 +8,8 @@
 #   --for claude|agents|both    which agents (default: both)
 #   --project new|existing      new/empty or existing project (default: detected from the folder)
 #   --prompt yes|no             add PROMPT.md (existing: always yes; new: default no)
+#   --update                    project already has the kit: add missing files, and save the
+#                               newer kit version of changed files as <file>.kit-new
 # Environment: NO_COLOR=1 turns colors off. AGENTS_MD_KIT_UI=plain uses typed answers instead of arrow-key menus.
 # Never overwrites: files that already exist are skipped and listed.
 # Exception: an existing .gitignore is kept and only missing lines are added.
@@ -64,13 +66,16 @@ usage() {
     --prompt yes|no       add PROMPT.md, the prompt that makes your AI fill
                           the placeholders (existing: always added; new: default no)
 
+    --update              the project already has the kit: add missing files, and
+                          save the newer kit version of changed files as <file>.kit-new
+
   ${D}Options you leave out are asked. Target folder: current folder if not given.${N}
 
 EOF
 }
 
 # ---------- arguments ----------
-choice=""; project=""; prompt=""; target="$PWD"
+choice=""; project=""; prompt=""; update=""; target="$PWD"
 need_value() { [ "$2" -ge 2 ] || fail "$1 needs a value (see --help)"; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -81,6 +86,7 @@ while [ $# -gt 0 ]; do
     --project=*) project="${1#--project=}"; shift ;;
     --prompt) need_value "$1" $#; prompt="$2"; shift 2 ;;
     --prompt=*) prompt="${1#--prompt=}"; shift ;;
+    --update) update=1; shift ;;
     -*) fail "Unknown option: $1 (see --help)" ;;
     *) target="$1"; shift ;;
   esac
@@ -93,7 +99,15 @@ case "$prompt" in ""|yes|no) ;; *) fail "Unknown --prompt value: $prompt (use ye
 
 # Empty folder (ignoring .git) means a new project.
 detected=existing
-[ -z "$(ls -A "$target" | grep -vxF '.git')" ] && detected=new
+[ -z "$(find "$target" -mindepth 1 -maxdepth 1 ! -name .git -print -quit)" ] && detected=new
+# Update mode: guess the installed version from the folders, and keep PROMPT.md as it was.
+installed=3
+[ -d "$target/.claude" ] && [ ! -d "$target/.agents" ] && installed=1
+[ ! -d "$target/.claude" ] && [ -d "$target/.agents" ] && installed=2
+if [ -n "$update" ]; then
+  project=existing
+  if [ -z "$prompt" ]; then if [ -e "$target/PROMPT.md" ]; then prompt=yes; else prompt=no; fi; fi
+fi
 
 # ---------- questions (only when someone can answer) ----------
 can_ask=""
@@ -214,16 +228,20 @@ say "  ${A}${BL}$(rule $w)${BR}${N}"
 say ""
 show_target="$target"; [ -n "${HOME:-}" ] && case "$target" in "$HOME"*) show_target="~${target#"$HOME"}" ;; esac
 say "  ${D}Folder: $show_target${N}"
+[ -n "$update" ] && say "  ${A}Update mode:${N} ${D}missing files are added; newer kit files are saved as *.kit-new${N}"
 [ -n "$menus" ] && say "  ${D}Pick with arrow keys. Nothing is overwritten.${N}" || say "  ${D}Nothing is overwritten.${N}"
 [ -n "$can_ask" ] && [ -z "$menus" ] || say ""   # typed questions bring their own blank line
 
 if [ -z "$choice" ]; then
   if [ -n "$can_ask" ]; then
-    choose "Which AI agents will you use in this project?" 3 \
+    def=3; [ -n "$update" ] && def=$installed
+    choose "Which AI agents will you use in this project?" "$def" \
       "Claude Code only|CLAUDE.md + .claude/" \
       "Codex / other agents|AGENTS.md + .agents/" \
       "Both (recommended)|CLAUDE.md + AGENTS.md + both folders"
     case "$answer" in 1) choice=claude ;; 2) choice=agents ;; *) choice=both ;; esac
+  elif [ -n "$update" ]; then
+    case "$installed" in 1) choice=claude ;; 2) choice=agents ;; *) choice=both ;; esac
   else
     choice=both
   fi
@@ -247,7 +265,9 @@ fi
 done_line "Project" "$project"
 
 prompt_note=""
-if [ "$project" = existing ]; then
+if [ -n "$update" ]; then
+  prompt_note="kept as it was"
+elif [ "$project" = existing ]; then
   [ "$prompt" = no ] && prompt_note="always added for existing projects"
   prompt=yes
 elif [ -z "$prompt" ]; then
@@ -290,7 +310,7 @@ else
 fi
 
 # ---------- copy ----------
-copied=0; added=(); skipped=(); gi_status=""; gi_added=()
+copied=0; same=0; added=(); skipped=(); newer=(); gi_status=""; gi_added=()
 todo=()
 while IFS= read -r -d '' f; do
   [ "${f#"$template"/}" = "PROMPT.md" ] && [ "$prompt" = no ] && continue
@@ -317,7 +337,16 @@ for ((k = 0; k < ${#todo[@]}; k++)); do
     fi
     continue
   fi
-  if [ -e "$dest" ]; then skipped+=("$rel"); continue; fi
+  if [ -e "$dest" ]; then
+    if [ -n "$update" ] && [ -f "$dest" ]; then
+      # Same content (line endings ignored): nothing to do. Different: save the kit's version beside it.
+      if [ "$(tr -d '\r' < "$f")" = "$(tr -d '\r' < "$dest")" ]; then same=$((same + 1))
+      else cp "$f" "$dest.kit-new"; newer+=("$rel"); fi
+    else
+      skipped+=("$rel")
+    fi
+    continue
+  fi
   mkdir -p "$(dirname "$dest")"
   cp "$f" "$dest"
   copied=$((copied + 1)); added+=("$rel")
@@ -345,6 +374,10 @@ fi
 for s in "${skipped[@]+"${skipped[@]}"}"; do
   rows+=("${Y}!${N} $(printf '%-12s' "$s") ${Y}already existed, left untouched${N}")
 done
+for s in "${newer[@]+"${newer[@]}"}"; do
+  rows+=("${A}${UP}${N} $(printf '%-12s' "$s") ${A}newer kit version saved as $s.kit-new${N}")
+done
+[ "$same" -gt 0 ] && rows+=("${D}= $(files "$same") already up to date${N}")
 for ((i = 0; i < ${#rows[@]}; i++)); do
   if [ $i -eq $((${#rows[@]} - 1)) ]; then br="$ELB"; else br="$TEE"; fi
   say "    ${D}${br}${N} ${rows[i]}"
@@ -360,6 +393,19 @@ prompt_skipped=""; for s in "${skipped[@]+"${skipped[@]}"}"; do [ "$s" = "PROMPT
 say ""
 say "  ${A}${STAR}${N} ${B}Next steps${N}"
 say ""
+if [ -n "$update" ]; then
+  if [ ${#newer[@]} -gt 0 ]; then
+    say "    ${A}1${N}  Merge each ${B}*.kit-new${N} file into the file next to it, then delete the .kit-new. Or tell your AI:"
+    say "       ${A}${PTR}${N} ${B}Merge every *.kit-new file into the file next to it. Keep my project details. Then delete the .kit-new files.${N}"
+  else
+    say "    ${A}1${N}  Nothing to merge. Your kit files match the latest version."
+  fi
+  say "    ${A}2${N}  New skills or plugins? Check ${B}docs/guides/setup.md${N}"
+  say ""
+  say "  ${G}${DOT}${N} ${B}Done.${N} ${D}Guide: $repo/blob/main/GUIDE.md${N}"
+  say ""
+  exit 0
+fi
 if [ "$prompt" = yes ] && [ -n "$prompt_skipped" ]; then
   say "    ${A}1${N}  Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N}."
   say "       ${Y}Your project already had a PROMPT.md, so the kit's prompt was not added.${N}"

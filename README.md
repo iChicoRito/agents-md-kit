@@ -1,5 +1,7 @@
 # agents-md-kit
 
+[![test](https://github.com/iChicoRito/agents-md-kit/actions/workflows/test.yml/badge.svg)](https://github.com/iChicoRito/agents-md-kit/actions/workflows/test.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 A small, scalable instruction setup for AI coding agents. One command adds it to any project. Pick the version for the agents you use: Claude Code, Codex (and other agents), or both.
 
 - One main instruction file, kept under 200 lines.
@@ -74,6 +76,23 @@ Prefer typed answers? Set `AGENTS_MD_KIT_UI=plain` before running. `NO_COLOR=1` 
 - It never overwrites a file. Files that already exist are skipped and listed, so you can merge them by hand.
 - It keeps an existing `.gitignore` and adds only the missing lines at the end.
 - Running it again changes nothing.
+
+**Update a project that already has the kit**
+
+Add `--update` (Bash) or `-Update` (PowerShell) to the install command:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.ps1))) -Update
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.sh | bash -s -- --update
+```
+
+- Kit files you deleted are added back.
+- A kit file that changed (in the kit or by you) is not touched. The newer kit version is saved next to it as `<file>.kit-new`, for example `CLAUDE.md.kit-new`.
+- Merge what you want from each `.kit-new` file, then delete it. Or tell your AI: *Merge every \*.kit-new file into the file next to it. Keep my project details. Then delete the .kit-new files.*
+- `*.kit-new` is in the kit's `.gitignore`, so these files are not committed by mistake.
 
 ## What you get
 
@@ -157,3 +176,7 @@ agents-md-kit() { curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents
 ```
 
 PowerShell uses `-For claude`; Bash uses `--for claude`.
+
+## License
+
+MIT. See [LICENSE](LICENSE). Use it, change it and share it freely.

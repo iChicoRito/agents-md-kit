@@ -1,3 +1,5 @@
 # Personal Claude Code files
 .claude/settings.local.json
 CLAUDE.local.md
+# agents-md-kit update files (merge them, then delete)
+*.kit-new
