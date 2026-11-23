@@ -175,9 +175,9 @@ Using it on an existing project? See [GUIDE.md](GUIDE.md#use-it-on-an-existing-p
 
 ## All commands
 
-Bash (Mac, Linux, Git Bash) uses `--option`. PowerShell uses `-Option`. Options can be combined, and the folder path goes at the end.
+Bash (Mac, Linux, Git Bash) uses `--option`. PowerShell uses `-Option`. **Options are not commands on their own:** type them after the install command (or after `agents-md-kit`, see [short command](#optional-short-command)), for example `agents-md-kit -For claude`. Options can be combined, and the folder path goes at the end.
 
-| Goal | Bash | PowerShell |
+| Goal | Bash: add to the command | PowerShell: add to the command |
 |---|---|---|
 | Install, answering the questions | `curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.sh \| bash` | `& ([scriptblock]::Create((irm https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.ps1)))` |
 | Claude Code only | `--for claude` | `-For claude` |
