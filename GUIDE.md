@@ -42,9 +42,6 @@ It keeps two personal files out of git:
 
 These stay on your computer and are never shared. It also leaves out `*.kit-new` files, which only exist while you merge an update.
 
-**`.agents-md-kit`: the kit version**
-A tiny file the installer writes. It says which kit version and which variant (claude, agents or both) the project has. The update mode reads it. Safe to commit. Do not edit it by hand.
-
 ### The `.claude/` folder: AI settings and rules
 
 **`.claude/settings.json`: Claude Code settings**

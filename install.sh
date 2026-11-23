@@ -15,10 +15,9 @@
 # Exception: an existing .gitignore is kept and only missing lines are added.
 set -euo pipefail
 
-kit_version="1.0.0"   # keep equal to the VERSION file (the tests check this)
+kit_version="1.0.1"   # keep equal to the VERSION file (the tests check this)
 repo="https://github.com/iChicoRito/agents-md-kit"
 archive="$repo/archive/refs/heads/main.tar.gz"
-marker=".agents-md-kit"   # small file in the project: which kit version and variant it has
 
 # ---------- output style ----------
 # ansi: a real terminal that understands cursor codes (needed for menus).
@@ -120,14 +119,6 @@ detected=existing
 installed=3
 [ -d "$target/.claude" ] && [ ! -d "$target/.agents" ] && installed=1
 [ ! -d "$target/.claude" ] && [ -d "$target/.agents" ] && installed=2
-# The marker file, when present, knows better than the folders.
-old_version=""
-if [ -f "$target/$marker" ]; then
-  old_version="$(sed -n 's/^version=//p' "$target/$marker" | tr -d '\r' | head -1)"
-  case "$(sed -n 's/^for=//p' "$target/$marker" | tr -d '\r' | head -1)" in
-    claude) installed=1 ;; agents) installed=2 ;; both) installed=3 ;;
-  esac
-fi
 if [ -n "$update" ]; then
   project=existing
   if [ -z "$prompt" ]; then if [ -e "$target/PROMPT.md" ]; then prompt=yes; else prompt=no; fi; fi
@@ -382,15 +373,7 @@ done
 progress "${#todo[@]}" "${#todo[@]}"
 [ -n "$ansi" ] && printf '\r\033[2K\033[?25h'
 
-# Record which kit version and variant the project has (read by --update next time).
-printf '# agents-md-kit: kit version and variant of this project. Used by --update. Safe to commit.\nversion=%s\nfor=%s\n' \
-  "$show_version" "$choice" > "$target/$marker"
-
 # ---------- result: a small tree of what changed ----------
-version_note="recorded in $marker"
-if [ -n "$old_version" ] && [ "$old_version" != "$show_version" ]; then version_note="was v$old_version"
-elif [ -n "$old_version" ]; then version_note="unchanged"; fi
-done_line "Version" "v$show_version" "$version_note"
 done_line "Copied" "$(files "$copied")"
 rows=()   # each row: "<text>" already colored
 if [ $copied -gt 0 ]; then

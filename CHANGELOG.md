@@ -9,6 +9,10 @@ All notable changes to agents-md-kit. Versions follow [semantic versioning](http
 3. Commit, push, wait for the tests to pass.
 4. Tag and publish: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`.
 
+## 1.0.1 - 2026-11-23
+
+- The installer no longer adds a `.agents-md-kit` file to projects. The version stays on GitHub (`VERSION`, releases) and in the installer's welcome box. `--update` works out the variant from the `.claude/` and `.agents/` folders. An old `.agents-md-kit` file from 1.0.0 can be deleted.
+
 ## 1.0.0 - 2026-11-23
 
 First release.
@@ -19,7 +23,7 @@ First release.
 - `PROMPT.md`: a prompt that makes your AI fill the placeholders from your code.
 - `--update`: adds missing kit files and saves newer kit versions as `*.kit-new`.
 - `--version`: installs a released version.
-- `.agents-md-kit` file records the kit version and variant of each project.
+- `.agents-md-kit` file records the kit version and variant of each project (removed in 1.0.1).
 - Line-limit hook for `CLAUDE.md` and `AGENTS.md` (200 lines). Skipped quietly without Node.js.
 - Automatic tests on Ubuntu, macOS and Windows.
 - MIT license.

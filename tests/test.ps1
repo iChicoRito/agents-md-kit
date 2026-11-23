@@ -42,7 +42,7 @@ try {
         Test-That "new: installs without error" { Invoke-Install @($d, "-For", $v, "-Project", "new", "-Prompt", "no") }
         Test-That "new: every kit file is there" { Test-HasAll $v $d $false }
         Test-That "new: no PROMPT.md" { -not (Test-Path "$d\PROMPT.md") }
-        Test-That "new: version marker written" { $m = Get-Content "$d\.agents-md-kit"; ($m -contains "version=$version") -and ($m -contains "for=$v") }
+        Test-That "new: no kit marker file added" { -not (Test-Path "$d\.agents-md-kit") }
         if ($v -eq "claude") { Test-That "new: no .agents folder" { -not (Test-Path "$d\.agents") } }
         if ($v -eq "agents") { Test-That "new: no .claude folder" { -not (Test-Path "$d\.claude") } }
 
@@ -62,8 +62,6 @@ try {
         $d = Join-Path $work "$v-update"; New-Item -ItemType Directory $d | Out-Null
         Invoke-Install @($d, "-For", $v, "-Project", "new", "-Prompt", "no") | Out-Null
         Add-Content "$d\$main" "# my notes"; Remove-Item "$d\docs\glossary.md"
-        # The marker must win over the folders: without .agents, a folder guess would say "claude".
-        if ($v -eq "both") { Remove-Item -Recurse -Force "$d\.agents" }
         Test-That "update: runs without error" { Invoke-Install @($d, "-Update") }
         Test-That "update: detects version $v" { $script:log -match "Agents\s+$v" }
         Test-That "update: deleted file restored" { Test-Path "$d\docs\glossary.md" }

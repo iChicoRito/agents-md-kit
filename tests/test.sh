@@ -33,7 +33,7 @@ for v in claude agents both; do
   check "new: installs without error" "install --for $v --project new --prompt no '$d'"
   check "new: every kit file is there" "has_all $v '$d' no"
   check "new: no PROMPT.md" "[ ! -e '$d/PROMPT.md' ]"
-  check "new: version marker written" "grep -qx 'version=$version' '$d/.agents-md-kit' && grep -qx 'for=$v' '$d/.agents-md-kit'"
+  check "new: no kit marker file added" "[ ! -e '$d/.agents-md-kit' ]"
   [ $v = claude ] && check "new: no .agents folder" "[ ! -e '$d/.agents' ]"
   [ $v = agents ] && check "new: no .claude folder" "[ ! -e '$d/.claude' ]"
 
@@ -58,8 +58,6 @@ for v in claude agents both; do
   d="$work/$v-update"; mkdir -p "$d"
   install --for $v --project new --prompt no "$d"
   echo "# my notes" >> "$d/$main"; rm "$d/docs/glossary.md"
-  # The marker must win over the folders: without .agents, a folder guess would say "claude".
-  [ $v = both ] && rm -rf "$d/.agents"
   check "update: runs without error" "install --update '$d'"
   check "update: detects version $v" "grep -q \"Agents *$v\" '$work/last.log'"
   check "update: deleted file restored" "[ -e '$d/docs/glossary.md' ]"

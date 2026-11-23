@@ -16,10 +16,9 @@
 param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$Help)
 $ErrorActionPreference = 'Stop'
 
-$kitVersion = "1.0.0"   # keep equal to the VERSION file (the tests check this)
+$kitVersion = "1.0.1"   # keep equal to the VERSION file (the tests check this)
 $repo = "https://github.com/iChicoRito/agents-md-kit"
 $archive = "$repo/archive/refs/heads/main.zip"
-$marker = ".agents-md-kit"   # small file in the project: which kit version and variant it has
 
 # ---------- output style ----------
 # A terminal with ANSI support (Windows Terminal, Windows 10+ console) gets the full look.
@@ -117,15 +116,6 @@ $detected = if (@(Get-ChildItem -LiteralPath $Target -Force | Where-Object { $_.
 # Update mode: guess the installed version from the folders, and keep PROMPT.md as it was.
 $hasClaude = Test-Path (Join-Path $Target ".claude"); $hasAgents = Test-Path (Join-Path $Target ".agents")
 $installed = if ($hasClaude -and -not $hasAgents) { 1 } elseif ($hasAgents -and -not $hasClaude) { 2 } else { 3 }
-# The marker file, when present, knows better than the folders.
-$oldVersion = ""
-$markerPath = Join-Path $Target $marker
-if (Test-Path $markerPath -PathType Leaf) {
-    $lines = @(Get-Content -LiteralPath $markerPath)
-    $oldVersion = ($lines | Where-Object { $_ -like 'version=*' } | Select-Object -First 1) -replace '^version=', ''
-    $markFor = ($lines | Where-Object { $_ -like 'for=*' } | Select-Object -First 1) -replace '^for=', ''
-    if ($markFor -in "claude", "agents", "both") { $installed = @{ claude = 1; agents = 2; both = 3 }[$markFor] }
-}
 if ($Update) {
     $Project = "existing"
     if (-not $Prompt) { $Prompt = if (Test-Path (Join-Path $Target "PROMPT.md")) { "yes" } else { "no" } }
@@ -339,12 +329,7 @@ try {
     Write-Progress-Bar $todo.Count $todo.Count
     if ($vt) { Write-Host "`r$E[2K" -NoNewline; try { [Console]::CursorVisible = $true } catch {} }
 
-    # Record which kit version and variant the project has (read by -Update next time).
-    [IO.File]::WriteAllText($markerPath, "# agents-md-kit: kit version and variant of this project. Used by --update. Safe to commit.`nversion=$showVersion`nfor=$For`n")
-
     # ---------- result: a small tree of what changed ----------
-    $versionNote = if ($oldVersion -and $oldVersion -ne $showVersion) { "was v$oldVersion" } elseif ($oldVersion) { "unchanged" } else { "recorded in $marker" }
-    Write-Done "Version" "v$showVersion" $versionNote
     Write-Done "Copied" (Format-Files $copied)
     $rows = @()   # each row: list of @(text, style) parts
     $added | Group-Object { $p = $_ -split '[\\/]'; if ($p.Count -gt 1) { $p[0] + "/" } else { $p[0] } } | Sort-Object Name | ForEach-Object {

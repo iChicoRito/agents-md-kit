@@ -96,7 +96,7 @@ curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/insta
 
 **Install a fixed version**
 
-Each install records its kit version in a small `.agents-md-kit` file, and the installer shows the version in its welcome box. To install a released version instead of the latest, add `--version` (Bash) or `-Version` (PowerShell):
+The installer shows its version in the welcome box. To install a released version instead of the latest, add `--version` (Bash) or `-Version` (PowerShell):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/install.sh | bash -s -- --version 1.0.0
