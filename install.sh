@@ -15,7 +15,7 @@
 # Exception: an existing .gitignore is kept and only missing lines are added.
 set -euo pipefail
 
-kit_version="1.4.0"   # keep equal to the VERSION file (the tests check this)
+kit_version="1.5.0"   # keep equal to the VERSION file (the tests check this)
 repo="https://github.com/iChicoRito/agents-md-kit"
 archive="$repo/archive/refs/heads/main.tar.gz"
 
@@ -81,6 +81,9 @@ usage() {
     --check               list the [PLACEHOLDERS] still left in CLAUDE.md, AGENTS.md
                           and docs/, then stop (exit code 1 when some are left)
 
+    --graph-view          build the graph view (graphify-out/graph.html, an interactive map of your
+                          code, like Obsidian's graph) from graphify-out/graph.json, then stop
+
     --graphify yes|no     graphify, the code knowledge graph: yes = install it if missing and
                           build the graph without asking, no = skip it (default: ask)
 
@@ -90,7 +93,7 @@ EOF
 }
 
 # ---------- arguments ----------
-choice=""; project=""; prompt=""; update=""; want_version=""; dry=""; add_cmd=""; check=""; gfy_flag=""; gfy_log=""; target="$PWD"
+choice=""; project=""; prompt=""; update=""; want_version=""; dry=""; add_cmd=""; check=""; gview=""; gfy_flag=""; gfy_log=""; target="$PWD"
 need_value() { [ "$2" -ge 2 ] || fail "$1 needs a value (see --help)"; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -107,6 +110,7 @@ while [ $# -gt 0 ]; do
     --dry-run) dry=1; shift ;;
     --add-command) add_cmd=1; shift ;;
     --check) check=1; shift ;;
+    --graph-view) gview=1; shift ;;
     --graphify) need_value "$1" $#; gfy_flag="$2"; shift 2 ;;
     --graphify=*) gfy_flag="${1#--graphify=}"; shift ;;
     -*) fail "Unknown option: $1 (see --help)" ;;
@@ -131,6 +135,12 @@ if [ -n "$add_cmd" ]; then
 fi
 [ -d "$target" ] || fail "Target folder not found: $target"
 target="$(cd "$target" && pwd)"
+
+# Where this script lives (empty when it is piped from curl).
+script_dir=""
+if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
 
 # ---------- --check: list placeholders still left in the kit files, then stop ----------
 # A placeholder is an uppercase word in brackets, like [PROJECT DESCRIPTION].
@@ -308,6 +318,60 @@ ask() {
   done
 }
 
+# ---------- the kit's own files: this checkout, or a download of main / the pinned release ----------
+kit_root=""; kit_src=""
+fetch_kit() {
+  [ -n "$kit_root" ] && return 0
+  if [ -z "$want_version" ] && [ -n "$script_dir" ] && [ -d "$script_dir/template" ]; then
+    kit_root="$script_dir"; kit_src=local; return 0
+  fi
+  tmp="$(mktemp -d)"
+  ( curl -fsSL "$archive" 2>/dev/null | tar -xz -C "$tmp" 2>/dev/null ) & local dl=$!   # errors: own message below
+  spin "Downloading template from GitHub" "$dl"
+  if ! wait "$dl"; then
+    [ -n "$want_version" ] && fail "Version $want_version not found. See $repo/releases"
+    fail "Could not download the template. Check your internet connection."
+  fi
+  kit_root="$(find "$tmp" -mindepth 1 -maxdepth 1 -type d | head -1)"
+  [ -d "$kit_root/template" ] || fail "Download incomplete: template/ not found"
+  kit_src=downloaded
+}
+
+# find_python: prints a Python 3.8+ command, or returns 1. Graphify needs Python, so it is nearly always there.
+find_python() {
+  local c list=""
+  case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) list="python python3 py" ;; *) list="python3 python" ;; esac
+  if [ -f "$target/graphify-out/.graphify_python" ]; then list="$(tr -d '\r\n' < "$target/graphify-out/.graphify_python") $list"; fi
+  for c in $list; do
+    if "$c" -c 'import sys; sys.exit(sys.version_info < (3, 8))' >/dev/null 2>&1; then echo "$c"; return 0; fi
+  done
+  return 1
+}
+
+# make_view: writes graphify-out/graph.html (Obsidian-style) from graphify-out/graph.json. Prints "<nodes> nodes".
+make_view() {
+  local py out
+  py="$(find_python)" || return 1
+  fetch_kit
+  out="$("$py" "$kit_root/tools/graph-view/graph_view.py" "$target/graphify-out/graph.json" -o "$target/graphify-out/graph.html" 2>&1)" || { printf '%s\n' "$out" >&2; return 1; }
+  printf '%s\n' "$out" | sed -n 's/.*(\([0-9]*\) nodes.*/\1 nodes/p'
+}
+
+# ---------- --graph-view: build the graph view, then stop ----------
+if [ -n "$gview" ]; then
+  say ""
+  [ -f "$target/graphify-out/graph.json" ] || fail "No graph found in $target/graphify-out. Build one first: graphify update ."
+  find_python >/dev/null || fail "Python 3.8 or newer is needed to build the graph view."
+  if [ -n "$dry" ]; then
+    done_line "Graph view" "would be built" "graphify-out/graph.html"; say ""; exit 0
+  fi
+  nodes="$(make_view 2>&1)" || fail "Could not build the graph view. ${nodes:-}"
+  done_line "Graph view" "built" "${nodes:+$nodes $SEP }graphify-out/graph.html"
+  say "    ${D}${ELB} open graphify-out/graph.html in your browser. Run this again after graphify updates the graph.${N}"
+  say ""
+  exit 0
+fi
+
 # ---------- welcome ----------
 w=50
 say ""
@@ -384,27 +448,13 @@ fi
 done_line "PROMPT.md" "$prompt" "$prompt_note"
 
 # ---------- find or download the template ----------
-script_dir=""
-if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
-  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-fi
 say ""
-if [ -z "$want_version" ] && [ -n "$script_dir" ] && [ -d "$script_dir/template/$choice" ]; then
-  template="$script_dir/template/$choice"
-  done_line "Template" "local copy"
-else
-  tmp="$(mktemp -d)"
-  ( curl -fsSL "$archive" 2>/dev/null | tar -xz -C "$tmp" 2>/dev/null ) & dl=$!   # errors: own message below
-  spin "Downloading template from GitHub" "$dl"
-  if ! wait "$dl"; then
-    [ -n "$want_version" ] && fail "Version $want_version not found. See $repo/releases"
-    fail "Could not download the template. Check your internet connection."
-  fi
-  template="$(find "$tmp" -mindepth 3 -maxdepth 3 -type d -path "*/template/$choice" | head -1)"
-  [ -d "$template" ] || fail "Download incomplete: template/$choice not found"
-  if [ -n "$want_version" ]; then done_line "Template" "downloaded" "release v$want_version"
-  else done_line "Template" "downloaded" "latest from GitHub"; fi
-fi
+fetch_kit
+template="$kit_root/template/$choice"
+[ -d "$template" ] || fail "Download incomplete: template/$choice not found"
+if [ "$kit_src" = local ]; then done_line "Template" "local copy"
+elif [ -n "$want_version" ]; then done_line "Template" "downloaded" "release v$want_version"
+else done_line "Template" "downloaded" "latest from GitHub"; fi
 
 # ---------- copy ----------
 copied=0; same=0; added=(); skipped=(); newer=(); gi_status=""; gi_added=()
@@ -573,6 +623,11 @@ graphify_step() {
   if gfy_run "Building the code graph" graphify update .; then
     nodes="$(grep -o 'Rebuilt: [^[]*' "$gfy_log" | tail -1 | sed 's/^Rebuilt: //' || true)"
     done_line "Graph" "built" "${nodes:+$nodes $SEP }graphify-out/"
+    if nodes="$(make_view 2>/dev/null)"; then
+      done_line "Graph view" "built" "${nodes:+$nodes $SEP }open graphify-out/graph.html"
+    else
+      say "    ${D}${ELB} graph view skipped (needs Python 3.8+). Try later: --graph-view${N}"
+    fi
     say "    ${D}${ELB} commit graphify-out/ to share it, or add it to .gitignore to keep it local${N}"
   else
     done_line "Graph" "build failed" "run graphify update . yourself to see why"

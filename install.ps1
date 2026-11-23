@@ -13,10 +13,10 @@
 # so the Unicode symbols are built from code points.
 #   -Update                    project already has the kit: add missing files, and save the
 #                              newer kit version of changed files as <file>.kit-new
-param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$DryRun, [switch]$AddCommand, [string]$ProfilePath = $PROFILE, [switch]$Check, [string]$Graphify = "", [switch]$Help)
+param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$DryRun, [switch]$AddCommand, [string]$ProfilePath = $PROFILE, [switch]$Check, [switch]$GraphView, [string]$Graphify = "", [switch]$Help)
 $ErrorActionPreference = 'Stop'
 
-$kitVersion = "1.4.0"   # keep equal to the VERSION file (the tests check this)
+$kitVersion = "1.5.0"   # keep equal to the VERSION file (the tests check this)
 $repo = "https://github.com/iChicoRito/agents-md-kit"
 $archive = "$repo/archive/refs/heads/main.zip"
 
@@ -101,6 +101,9 @@ if ($Help) {
     Write-Host "    -Check               list the [PLACEHOLDERS] still left in CLAUDE.md, AGENTS.md"
     Write-Host "                         and docs/, then stop"
     Write-Host ""
+    Write-Host "    -GraphView           build the graph view (graphify-out/graph.html, an interactive map of"
+    Write-Host "                         your code, like Obsidian's graph) from graphify-out/graph.json, then stop"
+    Write-Host ""
     Write-Host "    -Graphify yes|no     graphify, the code knowledge graph: yes = install it if missing"
     Write-Host "                         and build the graph without asking, no = skip it (default: ask)"
     Write-Host ""
@@ -142,6 +145,90 @@ if ($Version) {
 $showVersion = if ($Version) { $Version } else { $kitVersion }
 if (-not (Test-Path $Target -PathType Container)) { Write-Fail "Target folder not found: $Target"; return }
 $Target = (Resolve-Path $Target).Path
+
+# ---------- the kit's own files: this checkout, or a download of main / the pinned release ----------
+$script:tmp = $null; $script:kitRoot = $null; $script:kitSrc = ""
+function Get-KitRoot {
+    if ($script:kitRoot) { return $true }
+    if (-not $Version -and $PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "template"))) {
+        $script:kitRoot = $PSScriptRoot; $script:kitSrc = "local"; return $true
+    }
+    $script:tmp = Join-Path ([IO.Path]::GetTempPath()) ("agents-md-kit-" + [guid]::NewGuid())
+    New-Item -ItemType Directory -Path $script:tmp | Out-Null
+    $text = "Downloading template from GitHub"
+    if (-not $vt) { Write-Part "  $DOT $text..." -End }
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $wc = New-Object Net.WebClient
+        $task = $wc.DownloadFileTaskAsync($archive, "$($script:tmp)\kit.zip")
+        if ($vt) {
+            # Animated spinner while the download runs, like Claude Code's status line.
+            try { [Console]::CursorVisible = $false } catch {}
+            for ($i = 0; -not $task.IsCompleted; $i++) {
+                Write-Host "`r" -NoNewline; Write-Part $SPIN[$i % $SPIN.Count] Accent; Write-Part " $text "; Write-Part "($([int][Math]::Floor($i / 10))s)" Dim
+                Start-Sleep -Milliseconds 100
+            }
+            Write-Host "`r$E[2K" -NoNewline
+            try { [Console]::CursorVisible = $true } catch {}
+        } else { $task.Wait() }
+        if ($task.IsFaulted) { throw $task.Exception }
+        Add-Type -AssemblyName System.IO.Compression.FileSystem
+        [IO.Compression.ZipFile]::ExtractToDirectory("$($script:tmp)\kit.zip", $script:tmp)
+    } catch {
+        if ($vt) { Write-Host "`r$E[2K" -NoNewline; try { [Console]::CursorVisible = $true } catch {} }
+        if ($Version) { Write-Fail "Version $Version not found. See $repo/releases"; return $false }
+        Write-Fail "Could not download the template. Check your internet connection."; return $false
+    }
+    $root = Get-ChildItem -Path $script:tmp -Directory | Select-Object -First 1
+    if (-not $root -or -not (Test-Path (Join-Path $root.FullName "template"))) { Write-Fail "Download incomplete: template not found"; return $false }
+    $script:kitRoot = $root.FullName; $script:kitSrc = "downloaded"
+    return $true
+}
+
+# Returns a Python 3.8+ command, or $null. Graphify needs Python, so it is nearly always there.
+function Find-Python {
+    $ErrorActionPreference = "Continue"
+    $cands = @()
+    $gp = Join-Path $Target "graphify-out\.graphify_python"
+    if (Test-Path $gp) { $cands += (Get-Content -LiteralPath $gp -Raw).Trim() }
+    $cands += if ($env:OS -eq "Windows_NT") { "python", "py", "python3" } else { "python3", "python" }
+    foreach ($c in $cands) {
+        if (-not $c) { continue }
+        if (-not (Get-Command $c -ErrorAction SilentlyContinue) -and -not (Test-Path -LiteralPath $c)) { continue }
+        try { & $c -c "import sys; sys.exit(sys.version_info < (3, 8))" 2>$null | Out-Null } catch { continue }
+        if ($LASTEXITCODE -eq 0) { return $c }
+    }
+    return $null
+}
+
+# Writes graphify-out/graph.html (Obsidian-style) from graphify-out/graph.json. Returns "<n> nodes", or $null on failure.
+function New-GraphView {
+    $ErrorActionPreference = "Continue"
+    $py = Find-Python
+    if (-not $py) { return $null }
+    if (-not (Get-KitRoot)) { return $null }
+    $gen = Join-Path $script:kitRoot "tools\graph-view\graph_view.py"
+    $out = & $py $gen (Join-Path $Target "graphify-out\graph.json") -o (Join-Path $Target "graphify-out\graph.html") 2>&1 | Out-String
+    if ($LASTEXITCODE -ne 0) { return $null }
+    if ($out -match '\((\d+) nodes') { return "$($Matches[1]) nodes" }
+    return ""
+}
+
+# ---------- -GraphView: build the graph view, then stop ----------
+if ($GraphView) {
+    try {
+        Write-Host ""
+        if (-not (Test-Path (Join-Path $Target "graphify-out\graph.json"))) { Write-Fail "No graph found in $Target\graphify-out. Build one first: graphify update ."; return }
+        if (-not (Find-Python)) { Write-Fail "Python 3.8 or newer is needed to build the graph view."; return }
+        if ($DryRun) { Write-Done "Graph view" "would be built" "graphify-out/graph.html"; Write-Host ""; return }
+        $nodes = New-GraphView
+        if ($null -eq $nodes) { Write-Fail "Could not build the graph view."; return }
+        Write-Done "Graph view" "built" "$(if ($nodes) { "$nodes $SEP " })graphify-out/graph.html"
+        Write-Part "    $ELB open graphify-out/graph.html in your browser. Run this again after graphify updates the graph." Dim -End
+        Write-Host ""
+    } finally { if ($script:tmp) { Remove-Item -Recurse -Force $script:tmp -ErrorAction SilentlyContinue } }
+    return
+}
 
 # ---------- -Check: list placeholders still left in the kit files, then stop ----------
 # A placeholder is an uppercase word in brackets, like [PROJECT DESCRIPTION].
@@ -401,6 +488,9 @@ function Invoke-GraphifyStep {
     if ($r.Ok) {
         $nodes = if ($r.Out -match 'Rebuilt: ([^\r\n\[]+)') { $Matches[1].Trim() } else { "" }
         Write-Done "Graph" "built" "$(if ($nodes) { "$nodes $SEP " })graphify-out/"
+        $view = New-GraphView
+        if ($null -ne $view) { Write-Done "Graph view" "built" "$(if ($view) { "$view $SEP " })open graphify-out/graph.html" }
+        else { Write-Part "    $ELB graph view skipped (needs Python 3.8+). Try later: -GraphView" Dim -End }
         Write-Part "    $ELB commit graphify-out/ to share it, or add it to .gitignore to keep it local" Dim -End
     } else {
         Write-Done "Graph" "build failed" "run graphify update . yourself to see why"
@@ -410,44 +500,14 @@ function Invoke-GraphifyStep {
 }
 
 # ---------- find or download the template ----------
-$tmp = $null
 try {
     Write-Host ""
-    if (-not $Version -and $PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "template\$For"))) {
-        $Template = Join-Path $PSScriptRoot "template\$For"
-        Write-Done "Template" "local copy"
-    } else {
-        $tmp = Join-Path ([IO.Path]::GetTempPath()) ("agents-md-kit-" + [guid]::NewGuid())
-        New-Item -ItemType Directory -Path $tmp | Out-Null
-        $text = "Downloading template from GitHub"
-        if (-not $vt) { Write-Part "  $DOT $text..." -End }
-        try {
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            $wc = New-Object Net.WebClient
-            $task = $wc.DownloadFileTaskAsync($archive, "$tmp\kit.zip")
-            if ($vt) {
-                # Animated spinner while the download runs, like Claude Code's status line.
-                try { [Console]::CursorVisible = $false } catch {}
-                for ($i = 0; -not $task.IsCompleted; $i++) {
-                    Write-Host "`r" -NoNewline; Write-Part $SPIN[$i % $SPIN.Count] Accent; Write-Part " $text "; Write-Part "($([int][Math]::Floor($i / 10))s)" Dim
-                    Start-Sleep -Milliseconds 100
-                }
-                Write-Host "`r$E[2K" -NoNewline
-                try { [Console]::CursorVisible = $true } catch {}
-            } else { $task.Wait() }
-            if ($task.IsFaulted) { throw $task.Exception }
-            Add-Type -AssemblyName System.IO.Compression.FileSystem
-            [IO.Compression.ZipFile]::ExtractToDirectory("$tmp\kit.zip", $tmp)
-        } catch {
-            if ($vt) { Write-Host "`r$E[2K" -NoNewline; try { [Console]::CursorVisible = $true } catch {} }
-            if ($Version) { Write-Fail "Version $Version not found. See $repo/releases"; return }
-            Write-Fail "Could not download the template. Check your internet connection."; return
-        }
-        $Template = (Get-ChildItem -Path $tmp -Directory | ForEach-Object { Join-Path $_.FullName "template\$For" } |
-            Where-Object { Test-Path $_ } | Select-Object -First 1)
-        if (-not $Template) { Write-Fail "Download incomplete: template\$For not found"; return }
-        if ($Version) { Write-Done "Template" "downloaded" "release v$Version" } else { Write-Done "Template" "downloaded" "latest from GitHub" }
-    }
+    if (-not (Get-KitRoot)) { return }
+    $Template = Join-Path $script:kitRoot "template\$For"
+    if (-not (Test-Path $Template)) { Write-Fail "Download incomplete: template\$For not found"; return }
+    if ($script:kitSrc -eq "local") { Write-Done "Template" "local copy" }
+    elseif ($Version) { Write-Done "Template" "downloaded" "release v$Version" }
+    else { Write-Done "Template" "downloaded" "latest from GitHub" }
 
     # ---------- copy ----------
     $copied = 0; $same = 0; $added = @(); $skipped = @(); $newer = @(); $gitignoreAdded = $null
@@ -585,5 +645,5 @@ try {
         try { [Console]::CursorVisible = $true } catch {}
         Write-Host ""; Write-Host ""; Write-Part "  $DOT Cancelled. Files already copied stay; run again to finish." Yellow -End; Write-Host ""
     }
-    if ($tmp) { Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue }
+    if ($script:tmp) { Remove-Item -Recurse -Force $script:tmp -ErrorAction SilentlyContinue }
 }

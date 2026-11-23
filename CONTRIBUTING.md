@@ -20,6 +20,7 @@ template/agents/      files for Codex and other agents
 template/both/        files for both
 tests/test.sh         tests for install.sh
 tests/test.ps1        tests for install.ps1
+tools/graph-view/     the graph view: template.html (the page), graph_view.py (builds it), vendor/ (d3-force, inlined)
 assets/demo.tape      script that records the README GIF
 ```
 

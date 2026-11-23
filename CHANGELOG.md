@@ -9,6 +9,13 @@ All notable changes to agents-md-kit. Versions follow [semantic versioning](http
 3. Commit, push, wait for the tests to pass.
 4. Tag and publish: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`.
 
+## 1.5.0 - 2026-11-23
+
+- New graph view: `graphify-out/graph.html` is now an interactive, Obsidian-style map of the code. It is one offline file (no network, no CDN). Dragging a node pulls its neighbors along the links (force simulation). Hover lights up a node and its neighbors, click opens details and connections, `/` searches, the settings panel hides groups and tunes the forces, and there are dark and light themes. The look follows shadcn/ui (zinc).
+- `--graph-view` / `-GraphView`: builds the view from `graphify-out/graph.json`, then stops. The installer also builds it right after it builds the graph. graphify rewrites `graph.html` on every update, so run `--graph-view` again afterwards.
+- Needs Python 3.8+ (graphify needs Python already). The viewer ships in `tools/graph-view/` with the d3-force modules inlined (ISC license in `tools/graph-view/vendor/`).
+- Tests: graph view generator (`tests/test_graph_view.py`) plus installer checks, in both suites.
+
 ## 1.4.0 - 2026-11-23
 
 - The installer now asks about graphify at the end, always with No as the default. If `graphify` is missing it offers to install the official package (`graphifyy`, with `uv`, else `pipx`, else `pip --user`). If it is installed, or just got installed, it offers to build the code graph (`graphify update .`, code only, no AI, no tokens). It never installs or builds without a yes, and it skips both when a graph already exists.

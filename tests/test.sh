@@ -142,6 +142,22 @@ gfy G "$stubs/have" --dry-run --graphify yes
 check "graphify: dry run changes nothing" "[ ! -s '$stubs/log-G' ] && [ ! -e '$work/gfy-G/graphify-out' ]"
 check "bad --graphify value fails" "! install --graphify maybe '$work'"
 
+# graph view: an interactive, Obsidian-style graph.html built from graphify-out/graph.json
+echo "== graph view"
+py=""
+for c in python3 python py; do
+  if "$c" -c 'import sys; sys.exit(sys.version_info < (3, 8))' >/dev/null 2>&1; then py="$c"; break; fi
+done
+if [ -n "$py" ]; then
+  check "graph view: generator tests pass" "'$py' '$kit/tests/test_graph_view.py' > '$work/gv-unit.log' 2>&1 || { tail -15 '$work/gv-unit.log'; false; }"
+  d="$work/gview"; mkdir -p "$d/graphify-out"; cp "$kit/tests/fixtures/graph.json" "$d/graphify-out/graph.json"
+  check "graph view: installer builds graph.html" "install --graph-view '$d' && [ -s '$d/graphify-out/graph.html' ] && grep -q 'AuthModule' '$d/graphify-out/graph.html'"
+  check "graph view: dry run writes nothing" "rm '$d/graphify-out/graph.html' && install --graph-view --dry-run '$d' && [ ! -e '$d/graphify-out/graph.html' ]"
+  check "graph view: no graph fails" "mkdir -p '$work/nograph' && ! install --graph-view '$work/nograph'"
+else
+  echo "  skip  graph view tests: no Python 3.8+ found"
+fi
+
 # Bad input is refused
 echo "== errors"
 check "unknown --for value fails" "! install --for nope '$work'"

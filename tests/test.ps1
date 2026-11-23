@@ -134,6 +134,30 @@ try {
     Test-That "graphify: dry run changes nothing" { -not $logG -and -not (Test-Path "$gG\graphify-out") }
     Test-That "bad -Graphify value fails" { -not (Invoke-Install @($work, "-Graphify", "maybe")) }
 
+    "== graph view"
+    # An interactive, Obsidian-style graph.html built from graphify-out/graph.json
+    $py = $null
+    foreach ($c in "python", "py", "python3") {
+        if (-not (Get-Command $c -ErrorAction SilentlyContinue)) { continue }
+        & $c -c "import sys; sys.exit(sys.version_info < (3, 8))" 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { $py = $c; break }
+    }
+    if ($py) {
+        Test-That "graph view: generator tests pass" {
+            $ErrorActionPreference = "Continue"   # the tests print expected errors to stderr
+            $o = & $py (Join-Path $kit "tests\test_graph_view.py") 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) { Write-Host $o }
+            $LASTEXITCODE -eq 0
+        }
+        $d = Join-Path $work "gview"; New-Item -ItemType Directory "$d\graphify-out" | Out-Null
+        Copy-Item (Join-Path $kit "tests\fixtures\graph.json") "$d\graphify-out\graph.json"
+        Test-That "graph view: installer builds graph.html" { (Invoke-Install @($d, "-GraphView")) -and (Test-Path "$d\graphify-out\graph.html") -and ((Get-Content "$d\graphify-out\graph.html" -Raw) -match 'AuthModule') }
+        Remove-Item "$d\graphify-out\graph.html"
+        Test-That "graph view: dry run writes nothing" { (Invoke-Install @($d, "-GraphView", "-DryRun")) -and -not (Test-Path "$d\graphify-out\graph.html") }
+        $ng = Join-Path $work "nograph"; New-Item -ItemType Directory $ng | Out-Null
+        Test-That "graph view: no graph fails" { -not (Invoke-Install @($ng, "-GraphView")) }
+    } else { "  skip  graph view tests: no Python 3.8+ found" }
+
     "== errors"
     Test-That "unknown -For value fails" { -not (Invoke-Install @($work, "-For", "nope")) }
     Test-That "missing folder fails" { -not (Invoke-Install @((Join-Path $work "does-not-exist"), "-For", "both")) }

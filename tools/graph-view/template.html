@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>__TITLE_TEXT__ - Graph view</title>
+<style>
+/* Tokens follow shadcn/ui "zinc". Components below are plain-CSS versions of Card, Badge, Button, Input, Switch and Slider. */
+:root {
+  --radius: 0.5rem;
+  --background: 240 10% 3.9%;
+  --foreground: 0 0% 98%;
+  --card: 240 10% 3.9%;
+  --primary: 0 0% 98%;
+  --primary-foreground: 240 5.9% 10%;
+  --secondary: 240 3.7% 15.9%;
+  --muted: 240 3.7% 15.9%;
+  --muted-foreground: 240 5% 64.9%;
+  --accent: 240 3.7% 15.9%;
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+  --ring: 240 4.9% 83.9%;
+  --highlight: 262 83% 72%;
+  --shadow: 0 0% 0%;
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --background: 0 0% 100%;
+  --foreground: 240 10% 3.9%;
+  --card: 0 0% 100%;
+  --primary: 240 5.9% 10%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 240 4.8% 95.9%;
+  --muted: 240 4.8% 95.9%;
+  --muted-foreground: 240 3.8% 46.1%;
+  --accent: 240 4.8% 95.9%;
+  --border: 240 5.9% 90%;
+  --input: 240 5.9% 90%;
+  --ring: 240 5.9% 10%;
+  --highlight: 262 70% 50%;
+  --shadow: 240 10% 20%;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: hsl(var(--background)); color: hsl(var(--foreground));
+  font: 14px/1.45 var(--font); overflow: hidden; -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+::selection { background: hsl(var(--highlight) / 0.35); }
+:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+h1, h2, p { margin: 0; }
+button, input { font: inherit; color: inherit; }
+* { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 999px; }
+::-webkit-scrollbar-track { background: transparent; }
+[hidden] { display: none !important; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.muted { color: hsl(var(--muted-foreground)); }
+
+#stage { position: fixed; inset: 0; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; outline: none; }
+
+/* Card */
+.card {
+  background: hsl(var(--card)); color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border)); border-radius: calc(var(--radius) + 2px);
+  box-shadow: 0 1px 2px hsl(var(--shadow) / 0.25), 0 10px 28px -10px hsl(var(--shadow) / 0.5);
+}
+
+:root[data-theme="light"] .card { box-shadow: 0 1px 2px hsl(var(--shadow) / 0.1), 0 8px 24px -12px hsl(var(--shadow) / 0.22); }
+
+/* Top bar */
+.topbar { position: fixed; top: 12px; left: 12px; right: 12px; display: flex; align-items: center; gap: 8px; pointer-events: none; }
+.topbar > * { pointer-events: auto; }
+.spacer { flex: 1; pointer-events: none !important; }
+.brand { display: flex; align-items: center; gap: 10px; height: 40px; padding: 0 12px; min-width: 0; }
+.brand h1 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 22ch; }
+.brand .stats { display: flex; gap: 6px; }
+.icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Badge */
+.badge {
+  display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 1px 9px;
+  font-size: 12px; font-weight: 600; line-height: 1.5; white-space: nowrap;
+  background: hsl(var(--secondary)); color: hsl(var(--foreground)); border: 1px solid transparent;
+}
+.badge.outline { background: transparent; border-color: hsl(var(--border)); }
+.badge.xs { font-size: 11px; padding: 0 7px; font-weight: 500; color: hsl(var(--muted-foreground)); }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+
+/* Input */
+.search { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px; width: min(380px, 100%); }
+.search:focus-within { border-color: hsl(var(--ring)); }
+.search input { flex: 1; min-width: 0; height: 100%; background: transparent; border: 0; outline: 0; font-size: 14px; }
+.search input::placeholder { color: hsl(var(--muted-foreground)); }
+.search input::-webkit-search-cancel-button { display: none; }
+kbd {
+  font: 11px var(--mono); padding: 1px 6px; border-radius: 4px;
+  border: 1px solid hsl(var(--border)); background: hsl(var(--muted)); color: hsl(var(--muted-foreground));
+}
+#qcount { font-size: 12px; white-space: nowrap; }
+
+/* Button */
+.tools { display: flex; gap: 2px; padding: 4px; }
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;
+  border: 1px solid transparent; background: transparent; border-radius: calc(var(--radius) - 2px);
+  font-size: 13px; font-weight: 500; transition: background-color .15s, color .15s;
+}
+.btn:hover { background: hsl(var(--accent)); }
+.btn[aria-pressed="true"] { background: hsl(var(--accent)); }
+.btn.icon-only { width: 32px; height: 32px; padding: 0; }
+.btn.outline { border-color: hsl(var(--border)); height: 32px; padding: 0 12px; }
+.btn.sm { height: 28px; padding: 0 10px; font-size: 12px; }
+.btn:disabled { opacity: .5; pointer-events: none; }
+#phys .i-play { display: none; }
+#phys[aria-pressed="true"] .i-pause { display: none; }
+#phys[aria-pressed="true"] .i-play { display: block; }
+:root[data-theme="light"] #theme .i-sun { display: none; }
+:root:not([data-theme="light"]) #theme .i-moon { display: none; }
+
+/* Settings panel */
+.panel { position: fixed; top: 64px; right: 12px; width: 296px; max-height: calc(100vh - 76px); overflow: auto; padding: 4px 0; }
+.panel details { border-bottom: 1px solid hsl(var(--border)); }
+.panel details:last-child { border-bottom: 0; }
+.panel summary {
+  display: flex; align-items: center; justify-content: space-between; list-style: none; cursor: pointer;
+  padding: 12px 16px; font-weight: 600; font-size: 13px; user-select: none;
+}
+.panel summary::-webkit-details-marker { display: none; }
+.panel summary .chev { transition: transform .2s cubic-bezier(.16, 1, .3, 1); color: hsl(var(--muted-foreground)); }
+.panel details[open] summary .chev { transform: rotate(180deg); }
+.panel .body { padding: 0 16px 14px; display: grid; gap: 14px; }
+.row { display: grid; gap: 8px; }
+.row.inline { grid-template-columns: 1fr auto; align-items: center; }
+.row label, .row .lab { font-size: 13px; }
+.row .val { font-size: 12px; color: hsl(var(--muted-foreground)); float: right; }
+
+/* Switch */
+.switch {
+  position: relative; width: 36px; height: 20px; flex: none; cursor: pointer; padding: 0;
+  border-radius: 999px; border: 2px solid transparent; background: hsl(var(--input)); transition: background-color .15s;
+}
+.switch::after {
+  content: ""; position: absolute; top: 0; left: 0; width: 16px; height: 16px; border-radius: 50%;
+  background: hsl(var(--background)); box-shadow: 0 1px 3px hsl(var(--shadow) / 0.4);
+  transition: transform .18s cubic-bezier(.16, 1, .3, 1);
+}
+.switch[aria-checked="true"] { background: hsl(var(--primary)); }
+.switch[aria-checked="true"]::after { transform: translateX(16px); }
+
+/* Slider */
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 16px; margin: 0; background: transparent; cursor: pointer; }
+input[type=range]::-webkit-slider-runnable-track {
+  height: 6px; border-radius: 999px;
+  background: linear-gradient(to right, hsl(var(--primary)) var(--p, 50%), hsl(var(--secondary)) var(--p, 50%));
+}
+input[type=range]::-moz-range-track { height: 6px; border-radius: 999px; background: hsl(var(--secondary)); }
+input[type=range]::-moz-range-progress { height: 6px; border-radius: 999px; background: hsl(var(--primary)); }
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; margin-top: -5px; border-radius: 50%;
+  background: hsl(var(--background)); border: 2px solid hsl(var(--primary)); box-shadow: 0 1px 3px hsl(var(--shadow) / 0.4);
+}
+input[type=range]::-moz-range-thumb { width: 12px; height: 12px; border-radius: 50%; background: hsl(var(--background)); border: 2px solid hsl(var(--primary)); }
+input[type=range]:focus-visible { outline: 0; }
+input[type=range]:focus-visible::-webkit-slider-thumb { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+
+/* Groups */
+.groups { display: grid; gap: 2px; margin: 0 -8px; }
+.group {
+  display: grid; grid-template-columns: 10px 1fr auto; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 6px 8px; border-radius: calc(var(--radius) - 2px); border: 0; background: transparent; cursor: pointer; font-size: 13px;
+}
+.group:hover, .group:focus-visible { background: hsl(var(--accent)); }
+.group .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group .n { font-size: 12px; color: hsl(var(--muted-foreground)); }
+.group .dot { width: 10px; height: 10px; border: 2px solid transparent; }
+.group[aria-pressed="false"] { color: hsl(var(--muted-foreground)); }
+.group[aria-pressed="false"] .dot { background: transparent !important; border-color: currentColor; }
+
+/* Selection card */
+.detail { position: fixed; left: 12px; bottom: 12px; width: 320px; max-width: calc(100vw - 24px); max-height: 46vh; display: flex; flex-direction: column; }
+.detail header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; padding: 14px 8px 0 16px; }
+.detail h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.detail .meta { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 16px 0; }
+.detail .path { padding: 8px 16px 0; font: 12px var(--mono); color: hsl(var(--muted-foreground)); overflow-wrap: anywhere; }
+.detail .sep { height: 1px; background: hsl(var(--border)); margin: 12px 0 0; }
+.detail .list { overflow: auto; padding: 6px 8px 8px; min-height: 0; }
+.detail .list-title { padding: 10px 16px 0; font-size: 12px; color: hsl(var(--muted-foreground)); }
+.conn {
+  display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; width: 100%; text-align: left;
+  padding: 5px 8px; border: 0; background: transparent; border-radius: calc(var(--radius) - 2px); cursor: pointer; font-size: 13px;
+}
+.conn:hover, .conn:focus-visible { background: hsl(var(--accent)); }
+.conn .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.hint { position: fixed; right: 12px; bottom: 12px; font-size: 12px; padding: 6px 12px; transition: opacity .4s; }
+.hint.gone { opacity: 0; pointer-events: none; }
+.empty { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 20px 24px; text-align: center; max-width: 340px; }
+.empty h2 { font-size: 15px; font-weight: 600; }
+.empty p { margin-top: 6px; color: hsl(var(--muted-foreground)); }
+.empty code { font: 12px var(--mono); }
+
+@media (max-width: 720px) {
+  .topbar { flex-wrap: wrap; }
+  .brand .stats { display: none; }
+  .search { order: 3; flex: 1 1 100%; width: auto; }
+  .spacer { display: none; }
+  .tools { margin-left: auto; }
+  .panel { top: auto; left: 12px; right: 12px; bottom: 12px; width: auto; max-height: 58vh; }
+  .panel:not([hidden]) ~ .detail { display: none; }
+  .hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+</style>
+</head>
+<body>
+<main id="stage"><canvas id="cv" tabindex="0" role="img" aria-label="Interactive graph"></canvas></main>
+
+<header class="topbar">
+  <div class="card brand">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3"/><path d="M12 12V8"/></svg>
+    <h1 id="title"></h1>
+    <div class="stats"><span class="badge" id="b-nodes"></span><span class="badge" id="b-links"></span><span class="badge" id="b-groups"></span></div>
+  </div>
+  <label class="card search">
+    <svg class="icon muted" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+    <input id="q" type="search" placeholder="Search nodes" autocomplete="off" spellcheck="false" aria-label="Search nodes">
+    <span id="qcount" class="muted"></span>
+    <kbd id="qkbd">/</kbd>
+  </label>
+  <div class="spacer"></div>
+  <div class="card tools" role="toolbar" aria-label="View controls">
+    <button class="btn icon-only" id="fit" title="Fit to screen (F)" aria-label="Fit to screen"><svg class="icon" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/></svg></button>
+    <button class="btn icon-only" id="phys" aria-pressed="false" title="Pause physics (Space)" aria-label="Pause physics"><svg class="icon i-pause" viewBox="0 0 24 24"><rect x="14" y="4" width="4" height="16" rx="1"/><rect x="6" y="4" width="4" height="16" rx="1"/></svg><svg class="icon i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg></button>
+    <button class="btn icon-only" id="theme" title="Toggle theme" aria-label="Toggle theme"><svg class="icon i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg><svg class="icon i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg></button>
+    <button class="btn icon-only" id="cfg" aria-pressed="false" aria-controls="panel" title="Graph settings" aria-label="Graph settings"><svg class="icon" viewBox="0 0 24 24"><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="16" x2="16" y1="18" y2="22"/></svg></button>
+  </div>
+</header>
+
+<aside id="panel" class="card panel" aria-label="Graph settings" hidden></aside>
+<section id="detail" class="card detail" aria-label="Selected node" hidden></section>
+<p id="hint" class="card hint muted">Drag a node to pull its neighbors. Scroll to zoom.</p>
+<div id="empty" class="card empty" hidden><h2>This graph has no nodes yet</h2><p>Run <code>graphify update .</code> in your project, then build this view again.</p></div>
+<div id="live" class="sr" aria-live="polite"></div>
+
+<script>/*__VENDOR__*/</script>
+<script id="graph-data" type="application/json">/*__DATA__*/</script>
+<script>
+(() => {
+"use strict";
+const $ = (s) => document.querySelector(s);
+const root = document.documentElement;
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/* ---------- data ---------- */
+const raw = JSON.parse($("#graph-data").textContent);
+const kindOf = (n) => n._callable_class ? "class" : n._callable ? (String(n.label || "").startsWith(".") ? "method" : "function") : (n.file_type || "node");
+const nodes = (raw.nodes || []).map((n) => ({
+  id: String(n.id), label: String(n.label ?? n.id), comm: n.community ?? 0, cname: n.community_name || "",
+  kind: kindOf(n), file: n.source_file || "", loc: n.source_location || "", deg: 0, adj: [], vis: true,
+}));
+const byId = new Map(nodes.map((n) => [n.id, n]));
+const links = [];
+for (const e of raw.links || raw.edges || []) {
+  const s = byId.get(String(e.source)), t = byId.get(String(e.target));
+  if (!s || !t || s === t) continue;
+  const l = { source: s, target: t, rel: String(e.relation || "").replace(/_/g, " "), weak: e.confidence === "INFERRED" || e.confidence === "AMBIGUOUS" };
+  links.push(l); s.deg++; t.deg++; s.adj.push({ n: t, l }); t.adj.push({ n: s, l });
+}
+const N = nodes.length;
+const maxDeg = Math.max(1, ...nodes.map((n) => n.deg));
+const directed = !!raw.directed;
+
+const raw_groups = new Map();
+for (const n of nodes) {
+  if (!raw_groups.has(n.comm)) raw_groups.set(n.comm, { id: n.comm, name: n.cname, count: 0 });
+  const c = raw_groups.get(n.comm); c.count++; if (!c.name && n.cname) c.name = n.cname;
+}
+const ranked = [...raw_groups.values()].sort((a, b) => b.count - a.count);
+const MAX_GROUPS = 10;
+const comms = [];
+ranked.forEach((c, i) => {
+  if (ranked.length <= MAX_GROUPS + 2 || i < MAX_GROUPS) comms.push({ id: c.id, name: c.name || "Group " + c.id, count: c.count, visible: true, idx: i, other: false });
+});
+if (comms.length < ranked.length) {
+  const rest = ranked.slice(comms.length);
+  comms.push({ id: "other", name: `Other (${rest.length} small groups)`, count: rest.reduce((s, c) => s + c.count, 0), visible: true, idx: MAX_GROUPS, other: true });
+}
+const commMap = new Map(comms.map((c) => [c.id, c]));
+const other = comms.find((c) => c.other);
+const groupOf = new Map(ranked.map((c) => [c.id, commMap.get(c.id) || other]));
+for (const n of nodes) n.group = groupOf.get(n.comm);
+const hubs = new Set(N_HUBS(nodes));
+const byDegree = [...nodes].sort((a, b) => b.deg - a.deg);
+function N_HUBS(list) { return list.length > 40 ? [...list].sort((a, b) => b.deg - a.deg).slice(0, 10).filter((n) => n.deg >= 3) : []; }
+
+/* ---------- colors ---------- */
+const PAL = [[262, 83, 72], [199, 89, 62], [142, 66, 52], [35, 92, 60], [340, 82, 68], [173, 70, 46], [12, 85, 64], [221, 83, 70], [84, 62, 50], [291, 60, 68]];
+function commColor(c, light) {
+  if (c.other) return light ? "hsl(240,4%,62%)" : "hsl(240,5%,48%)";
+  const [h, s, l] = PAL[c.idx % PAL.length];
+  return `hsl(${h},${s}%,${light ? l - 20 : l}%)`;
+}
+let C = {};
+const FONT = getComputedStyle(root).getPropertyValue("--font");
+function readColors() {
+  const cs = getComputedStyle(root);
+  const light = root.dataset.theme === "light";
+  const hsl = (name, a = 1) => { const [h, s, l] = cs.getPropertyValue(name).trim().split(/\s+/); return `hsla(${h},${s},${l},${a})`; };
+  C = { light, bg: hsl("--background"), bg9: hsl("--background", 0.88), fg: hsl("--foreground"), muted: hsl("--muted-foreground"),
+        link: hsl("--foreground", light ? 0.22 : 0.17), linkDim: hsl("--foreground", 0.06), hi: hsl("--highlight", 0.95), ring: hsl("--foreground") };
+  for (const c of comms) c.color = commColor(c, light);
+}
+
+/* ---------- parameters ---------- */
+const big = N > 3000;
+const DEF = N <= 60 ? { repel: 170, dist: 90 } : N <= 600 ? { repel: 90, dist: 50 } : { repel: 40, dist: 30 };
+const P = { center: 0.35, repel: DEF.repel, link: 1, dist: DEF.dist, size: 1, width: 1, fade: 0.45, orphans: true, arrows: directed };
+
+const radius = (n) => clamp(3 + 1.8 * Math.sqrt(n.deg), 3, 16) * P.size;
+
+/* ---------- simulation ---------- */
+let visNodes = [], visLinks = [];
+const linkForce = d3.forceLink([]).id((d) => d.id);
+const sim = d3.forceSimulation([])
+  .force("link", linkForce)
+  .force("charge", d3.forceManyBody().distanceMax(900).theta(0.9))
+  .force("x", d3.forceX()).force("y", d3.forceY())
+  .velocityDecay(0.35)
+  .on("tick", () => { dirty = true; });
+if (!big) sim.force("collide", d3.forceCollide().radius((n) => radius(n) + 2.5).strength(0.7));
+let paused = false;
+function applyForces() {
+  linkForce.distance(P.dist).strength((l) => (P.link / Math.min(l.source.deg, l.target.deg)));
+  sim.force("charge").strength(-P.repel);
+  sim.force("x").strength(P.center * 0.12); sim.force("y").strength(P.center * 0.12);
+}
+function rebuild(heat) {
+  visNodes = nodes.filter((n) => n.vis);
+  visLinks = links.filter((l) => l.source.vis && l.target.vis);
+  sim.nodes(visNodes); linkForce.links(visLinks); applyForces();
+  if (heat && !paused) sim.alpha(Math.max(sim.alpha(), heat)).restart();
+  hoverNode = null; cache.clear(); dirty = true;
+}
+function updateVisibility() {
+  for (const n of nodes) n.vis = n.group.visible && (P.orphans || n.deg > 0);
+}
+// seed: groups start in their own sector so the first layout settles fast
+{
+  const R = Math.min(420, 40 * Math.sqrt(N + 1));
+  for (const n of nodes) {
+    const c = n.group, a = (comms.indexOf(c) / Math.max(1, comms.length)) * Math.PI * 2, r = R * 0.6;
+    n.x = Math.cos(a) * r + (Math.random() - 0.5) * R * 0.5; n.y = Math.sin(a) * r + (Math.random() - 0.5) * R * 0.5;
+  }
+}
+
+/* ---------- view state ---------- */
+const cv = $("#cv"), ctx = cv.getContext("2d");
+let W = 0, H = 0, dpr = 1, tx = 0, ty = 0, k = 1, dirty = true, cam = null;
+let hoverNode = null, hoverGroup = null, selected = null, matches = null;
+const cache = new Map();
+const toWorld = (x, y) => ({ x: (x - tx) / k, y: (y - ty) / k });
+
+function resize() {
+  const r = $("#stage").getBoundingClientRect();
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  if (W) { tx += (r.width - W) / 2; ty += (r.height - H) / 2; }
+  W = r.width; H = r.height;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  dirty = true;
+}
+new ResizeObserver(resize).observe($("#stage"));
+
+function neighborhood(n) {
+  let s = cache.get(n);
+  if (!s) { s = new Set([n]); for (const a of n.adj) if (a.n.vis) s.add(a.n); cache.set(n, s); }
+  return s;
+}
+const lblCache = new WeakMap();
+function labelNodes(set) {
+  let list = lblCache.get(set);
+  if (!list) {
+    const cap = set === matches ? 60 : 24;
+    list = set.size <= cap * 2 ? [...set] : [...set].sort((a, b) => b.deg - a.deg).slice(0, cap);
+    lblCache.set(set, list);
+  }
+  return list;
+}
+function activeSet() {
+  if (hoverNode) return neighborhood(hoverNode);
+  if (hoverGroup !== null) {
+    let s = cache.get("g" + hoverGroup);
+    if (!s) { s = new Set(visNodes.filter((n) => n.group.id === hoverGroup)); cache.set("g" + hoverGroup, s); }
+    return s;
+  }
+  if (matches && matches.size) return matches;
+  if (selected && selected.vis) return neighborhood(selected);
+  return null;
+}
+
+/* ---------- drawing ---------- */
+function draw() {
+  dirty = false;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  if (!visNodes.length) return;
+  const act = activeSet();
+  ctx.save();
+  ctx.translate(tx, ty); ctx.scale(k, k);
+  ctx.lineCap = "round";
+
+  // links: calm ones first, then the highlighted ones on top
+  const lw = (P.width * 1.1) / k;
+  const strokeLinks = (list, style, width, dashed) => {
+    if (!list.length) return;
+    ctx.beginPath();
+    for (const l of list) { ctx.moveTo(l.source.x, l.source.y); ctx.lineTo(l.target.x, l.target.y); }
+    ctx.strokeStyle = style; ctx.lineWidth = width; ctx.setLineDash(dashed ? [5 / k, 4 / k] : []); ctx.stroke();
+  };
+  const focus = hoverNode || (hoverGroup === null && !(matches && matches.size) && selected && selected.vis ? selected : null);
+  const calm = [], calmWeak = [], lit = [], litSet = new Set();
+  for (const l of visLinks) {
+    const on = act && (focus ? (l.source === focus || l.target === focus) : (act.has(l.source) && act.has(l.target)));
+    if (on) { lit.push(l); litSet.add(l); } else (l.weak ? calmWeak : calm).push(l);
+  }
+  const base = act ? C.linkDim : C.link;
+  strokeLinks(calm, base, lw, false); strokeLinks(calmWeak, base, lw, true);
+  strokeLinks(lit, C.hi, lw * 1.6, false);
+  ctx.setLineDash([]);
+
+  if (P.arrows && k > 0.5) {
+    ctx.fillStyle = act ? C.linkDim : C.link;
+    for (const l of visLinks) arrow(l, litSet.has(l));
+  }
+
+  // nodes
+  const dimA = 0.22;
+  const paintNodes = (on) => {
+    for (const n of visNodes) {
+      const isAct = !act || act.has(n);
+      if (isAct !== on) continue;
+      const r = radius(n);
+      ctx.globalAlpha = isAct ? 1 : dimA;
+      ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 6.2832);
+      ctx.fillStyle = n.group.color; ctx.fill();
+      ctx.lineWidth = 1 / k; ctx.strokeStyle = C.bg; ctx.stroke();
+    }
+  };
+  paintNodes(false); paintNodes(true);
+  ctx.globalAlpha = 1;
+  const ringNode = (n, color, w) => { ctx.beginPath(); ctx.arc(n.x, n.y, radius(n) + 3 / k, 0, 6.2832); ctx.lineWidth = w / k; ctx.strokeStyle = color; ctx.stroke(); };
+  if (selected && selected.vis) ringNode(selected, C.ring, 2);
+  if (hoverNode) ringNode(hoverNode, C.hi, 2);
+  ctx.restore();
+
+  // labels in screen space, so type stays crisp at every zoom
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.textAlign = "center"; ctx.textBaseline = "top"; ctx.lineJoin = "round";
+  const tk = 0.35 + P.fade * 3.15;
+  let budget = big ? 350 : 1200;
+  const CELL = 64, taken = new Map();
+  const spans = (r) => { const c = []; for (let i = Math.floor(r[0] / CELL); i <= Math.floor(r[2] / CELL); i++) for (let j = Math.floor(r[1] / CELL); j <= Math.floor(r[3] / CELL); j++) c.push(i + "," + j); return c; };
+  const isFree = (r) => spans(r).every((key) => !(taken.get(key) || []).some((o) => r[0] < o[2] && r[2] > o[0] && r[1] < o[3] && r[3] > o[1]));
+  const label = (n, a, bold, force) => {
+    const sx = n.x * k + tx, sy = n.y * k + ty;
+    if (sx < -80 || sx > W + 80 || sy < -30 || sy > H + 30) return;
+    ctx.font = (bold ? "600 " : "500 ") + "12px " + FONT;
+    const w = ctx.measureText(n.label).width, y = sy + radius(n) * k + 4, r = [sx - w / 2 - 3, y - 1, sx + w / 2 + 3, y + 15];
+    if (!force && !isFree(r)) return;
+    for (const key of spans(r)) { if (!taken.has(key)) taken.set(key, []); taken.get(key).push(r); }
+    ctx.globalAlpha = a;
+    ctx.lineWidth = 4; ctx.strokeStyle = C.bg9; ctx.strokeText(n.label, sx, y);
+    ctx.fillStyle = C.fg; ctx.fillText(n.label, sx, y);
+  };
+  // the nodes you point at get their space first, then the rest by importance
+  if (hoverNode) label(hoverNode, 1, true, true);
+  if (selected && selected.vis && selected !== hoverNode) label(selected, 1, true, true);
+  if (act) {
+    for (const n of labelNodes(act)) if (n !== hoverNode && n !== selected) label(n, 1, false);
+  } else {
+    for (const n of byDegree) {
+      if (!n.vis || n === hoverNode || n === selected) continue;
+      const th = tk * (1 - 0.72 * Math.sqrt(n.deg / maxDeg));
+      let a = clamp((k - th) / (th * 0.5 + 0.12), 0, 1);
+      if (hubs.has(n)) a = Math.max(a, 0.9);
+      if (a < 0.03) { if (!hubs.size || n.deg < 3) break; continue; }
+      if (budget-- <= 0) break;
+      label(n, a, false);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+function arrow(l, on) {
+  const dx = l.target.x - l.source.x, dy = l.target.y - l.source.y, d = Math.hypot(dx, dy);
+  if (d < 1) return;
+  const r = radius(l.target) + 2 / k, ux = dx / d, uy = dy / d, s = 6 / k;
+  const bx = l.target.x - ux * r, by = l.target.y - uy * r;
+  ctx.fillStyle = on ? C.hi : ctx.fillStyle;
+  ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx - ux * s - uy * s * 0.5, by - uy * s + ux * s * 0.5); ctx.lineTo(bx - ux * s + uy * s * 0.5, by - uy * s - ux * s * 0.5); ctx.closePath(); ctx.fill();
+}
+function frame(now) {
+  if (cam) {
+    const p = Math.min(1, (now - cam.t0) / cam.d), e = p === 1 ? 1 : 1 - Math.pow(2, -10 * p);
+    tx = cam.a[0] + (cam.b[0] - cam.a[0]) * e; ty = cam.a[1] + (cam.b[1] - cam.a[1]) * e;
+    k = cam.a[2] * Math.pow(cam.b[2] / cam.a[2], e); dirty = true;
+    if (p === 1) cam = null;
+  }
+  if (dirty) draw();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- camera ---------- */
+function flyTo(ntx, nty, nk) {
+  if (reduceMotion) { tx = ntx; ty = nty; k = nk; dirty = true; return; }
+  cam = { t0: performance.now(), d: 450, a: [tx, ty, k], b: [ntx, nty, nk] };
+}
+function fit(animate) {
+  const list = visNodes;
+  if (!list.length) return;
+  let xs = list.map((n) => n.x).sort((a, b) => a - b), ys = list.map((n) => n.y).sort((a, b) => a - b);
+  const lo = list.length > 200 ? Math.floor(list.length * 0.01) : 0, hi = list.length - 1 - lo;
+  const x0 = xs[lo], x1 = xs[hi], y0 = ys[lo], y1 = ys[hi];
+  const bw = Math.max(40, x1 - x0), bh = Math.max(40, y1 - y0), pad = 90;
+  const nk = clamp(Math.min((W - pad * 2) / bw, (H - pad * 2) / bh), 0.05, 2.4);
+  const ntx = W / 2 - ((x0 + x1) / 2) * nk, nty = H / 2 - ((y0 + y1) / 2) * nk;
+  if (animate) flyTo(ntx, nty, nk); else { tx = ntx; ty = nty; k = nk; dirty = true; }
+}
+function zoomAt(x, y, f) {
+  cam = null;
+  const nk = clamp(k * f, 0.03, 10), wx = (x - tx) / k, wy = (y - ty) / k;
+  k = nk; tx = x - wx * k; ty = y - wy * k; dirty = true;
+}
+function focusNode(n) {
+  const nk = clamp(Math.max(k, 1.4), 0.5, 4);
+  flyTo(W / 2 - n.x * nk, H / 2 - n.y * nk, nk);
+}
+
+/* ---------- picking and pointer input ---------- */
+function pick(x, y) {
+  const w = toWorld(x, y);
+  const n = sim.find(w.x, w.y, 44 / k);
+  if (!n) return null;
+  return Math.hypot(n.x - w.x, n.y - w.y) <= radius(n) + 5 / k ? n : null;
+}
+const ptrs = new Map();
+let drag = null, pan = null, pinch = null, down = null, moved = false, hintGone = false;
+const hint = $("#hint");
+function dismissHint() { if (!hintGone) { hintGone = true; hint.classList.add("gone"); } }
+
+cv.addEventListener("pointerdown", (e) => {
+  cv.setPointerCapture(e.pointerId); cam = null;
+  ptrs.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
+  if (ptrs.size === 2) {
+    const [a, b] = [...ptrs.values()];
+    pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), k0: k }; drag = pan = null; return;
+  }
+  const n = pick(e.offsetX, e.offsetY);
+  down = { x: e.offsetX, y: e.offsetY }; moved = false;
+  if (n) drag = n; else pan = { tx: tx, ty: ty };
+});
+cv.addEventListener("pointermove", (e) => {
+  const p = ptrs.get(e.pointerId);
+  if (p) { p.x = e.offsetX; p.y = e.offsetY; }
+  if (pinch && ptrs.size === 2) {
+    const [a, b] = [...ptrs.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+    zoomAt((a.x + b.x) / 2, (a.y + b.y) / 2, (pinch.k0 * (d / pinch.d)) / k); return;
+  }
+  if (drag) {
+    if (!moved && Math.hypot(e.offsetX - down.x, e.offsetY - down.y) < 4) return;
+    if (!moved) { moved = true; hoverNode = drag; dismissHint(); if (!paused) sim.alphaTarget(0.3).restart(); }
+    const w = toWorld(e.offsetX, e.offsetY);
+    drag.fx = w.x; drag.fy = w.y;
+    if (paused) { drag.x = w.x; drag.y = w.y; dirty = true; }
+    return;
+  }
+  if (pan) {
+    if (Math.hypot(e.offsetX - down.x, e.offsetY - down.y) > 3) moved = true;
+    tx = pan.tx + (e.offsetX - down.x); ty = pan.ty + (e.offsetY - down.y); dirty = true; cv.style.cursor = "grabbing"; return;
+  }
+  if (e.pointerType === "mouse") {
+    const n = pick(e.offsetX, e.offsetY);
+    if (n !== hoverNode) { hoverNode = n; cv.style.cursor = n ? "pointer" : "default"; dirty = true; }
+  }
+});
+function endPointer(e) {
+  ptrs.delete(e.pointerId);
+  if (pinch) { if (ptrs.size < 2) pinch = null; return; }
+  if (drag) {
+    if (moved) { drag.fx = drag.fy = null; if (!paused) sim.alphaTarget(0); }
+    else select(drag, false);
+    drag = null; hoverNode = null; dirty = true;
+  } else if (pan) {
+    if (!moved) select(null);
+    pan = null; cv.style.cursor = "default";
+  }
+}
+cv.addEventListener("pointerup", endPointer);
+cv.addEventListener("pointercancel", endPointer);
+cv.addEventListener("pointerleave", () => { if (!drag && hoverNode) { hoverNode = null; dirty = true; } });
+cv.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const unit = e.deltaMode === 1 ? 33 : 1;
+  zoomAt(e.offsetX, e.offsetY, Math.exp(-e.deltaY * unit * (e.ctrlKey ? 0.01 : 0.0016)));
+}, { passive: false });
+cv.addEventListener("dblclick", (e) => { const n = pick(e.offsetX, e.offsetY); if (n) focusNode(n); else fit(true); });
+
+/* ---------- selection card ---------- */
+const el = (tag, props = {}, ...kids) => {
+  const x = document.createElement(tag);
+  for (const [a, v] of Object.entries(props)) { if (a === "class") x.className = v; else if (a === "text") x.textContent = v; else if (a.startsWith("on")) x.addEventListener(a.slice(2), v); else x.setAttribute(a, v); }
+  for (const c of kids) if (c) x.append(c);
+  return x;
+};
+const live = $("#live"), detail = $("#detail");
+function select(n, fly = true) {
+  selected = n; dirty = true;
+  detail.replaceChildren();
+  if (!n) { detail.hidden = true; return; }
+  const c = n.group, gname = c.other ? (n.cname || c.name) : c.name;
+  const nb = [...n.adj].sort((a, b) => b.n.deg - a.n.deg);
+  detail.append(
+    el("header", {}, el("h2", { text: n.label }),
+      el("button", { class: "btn icon-only", title: "Close (Esc)", "aria-label": "Close", onclick: () => select(null) },
+        (() => { const s = document.createElementNS("http://www.w3.org/2000/svg", "svg"); s.setAttribute("class", "icon"); s.setAttribute("viewBox", "0 0 24 24"); s.innerHTML = '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'; return s; })())),
+    el("div", { class: "meta" },
+      el("span", { class: "badge outline", text: n.kind }),
+      el("span", { class: "badge outline" }, el("i", { class: "dot", style: "background:" + c.color }), document.createTextNode(gname))),
+    n.file ? el("div", { class: "path", text: n.file + (n.loc ? ":" + String(n.loc).replace(/^L/, "") : "") }) : null,
+    el("div", { class: "sep" }),
+    el("div", { class: "list-title", text: nb.length ? `Connections (${nb.length})` : "No connections" }),
+  );
+  if (nb.length) {
+    const list = el("div", { class: "list" });
+    for (const a of nb.slice(0, 80)) {
+      list.append(el("button", { class: "conn", onclick: () => { select(a.n); focusNode(a.n); }, onmouseenter: () => { hoverNode = a.n; dirty = true; }, onmouseleave: () => { hoverNode = null; dirty = true; } },
+        el("span", { class: "badge xs outline", text: a.l.rel || "linked" }), el("span", { class: "nm", text: a.n.label })));
+    }
+    if (nb.length > 80) list.append(el("p", { class: "list-title", text: `${nb.length - 80} more not shown` }));
+    detail.append(list);
+  }
+  detail.hidden = false;
+  live.textContent = `Selected ${n.label}, ${nb.length} connections`;
+  if (fly) focusNode(n);
+}
+
+/* ---------- search ---------- */
+const q = $("#q"), qcount = $("#qcount"), qkbd = $("#qkbd");
+function runSearch() {
+  const t = q.value.trim().toLowerCase();
+  qkbd.hidden = !!t;
+  if (!t) { matches = null; qcount.textContent = ""; dirty = true; return; }
+  matches = new Set(visNodes.filter((n) => n.label.toLowerCase().includes(t) || n.file.toLowerCase().includes(t)));
+  qcount.textContent = matches.size ? `${matches.size} ${matches.size === 1 ? "match" : "matches"}` : "No matches";
+  dirty = true;
+}
+q.addEventListener("input", runSearch);
+q.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && matches && matches.size) {
+    const best = [...matches].sort((a, b) => b.deg - a.deg)[0];
+    select(best); q.blur();
+  } else if (e.key === "Escape") { q.value = ""; runSearch(); q.blur(); e.stopPropagation(); }
+});
+
+/* ---------- settings panel ---------- */
+const panel = $("#panel"), cfgBtn = $("#cfg");
+const chev = '<svg class="icon chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>';
+function section(title, body, open = true) {
+  const d = el("details", open ? { open: "" } : {});
+  const s = el("summary", {}, el("span", { text: title })); s.insertAdjacentHTML("beforeend", chev);
+  d.append(s, el("div", { class: "body" }, ...body)); return d;
+}
+function toggleRow(label, key, onchange) {
+  const b = el("button", { class: "switch", role: "switch", "aria-checked": String(P[key]), "aria-label": label });
+  b.addEventListener("click", () => { P[key] = !P[key]; b.setAttribute("aria-checked", String(P[key])); onchange(); dirty = true; });
+  return el("div", { class: "row inline" }, el("span", { class: "lab", text: label }), b);
+}
+const sliders = [];
+function sliderRow(label, key, min, max, step, fmt, onchange) {
+  const inp = el("input", { type: "range", min, max, step, "aria-label": label }), val = el("span", { class: "val" });
+  const paint = () => { inp.value = P[key]; val.textContent = fmt(P[key]); inp.style.setProperty("--p", ((P[key] - min) / (max - min)) * 100 + "%"); };
+  inp.addEventListener("input", () => { P[key] = parseFloat(inp.value); paint(); onchange(); dirty = true; });
+  paint(); sliders.push({ key, paint });
+  return el("div", { class: "row" }, el("div", {}, el("span", { class: "lab", text: label }), val), inp);
+}
+const reheat = () => { applyForces(); if (!paused) sim.alpha(Math.max(sim.alpha(), 0.35)).restart(); };
+const groupList = el("div", { class: "groups" });
+for (const c of comms) {
+  const b = el("button", { class: "group", "aria-pressed": "true", title: c.name },
+    el("i", { class: "dot" }), el("span", { class: "name", text: c.name }), el("span", { class: "n", text: String(c.count) }));
+  c.btn = b; c.dotEl = b.querySelector(".dot");
+  b.addEventListener("click", () => { c.visible = !c.visible; b.setAttribute("aria-pressed", String(c.visible)); updateVisibility(); rebuild(0.5); runSearch(); if (selected && !selected.vis) select(null); });
+  b.addEventListener("mouseenter", () => { hoverGroup = c.id; dirty = true; });
+  b.addEventListener("mouseleave", () => { hoverGroup = null; dirty = true; });
+  groupList.append(b);
+}
+const resetBtn = el("button", { class: "btn outline sm", text: "Reset forces", onclick: () => {
+  Object.assign(P, { center: 0.35, repel: DEF.repel, link: 1, dist: DEF.dist }); sliders.forEach((s) => s.paint()); reheat();
+} });
+panel.append(
+  section("Filters", [toggleRow("Show orphans", "orphans", () => { updateVisibility(); rebuild(0.4); runSearch(); })]),
+  section("Groups", [groupList]),
+  section("Display", [
+    toggleRow("Show arrows", "arrows", () => {}),
+    sliderRow("Node size", "size", 0.4, 2.5, 0.05, (v) => v.toFixed(2) + "x", () => { const c = sim.force("collide"); if (c) c.radius((n) => radius(n) + 2.5); }),
+    sliderRow("Link thickness", "width", 0.3, 3, 0.1, (v) => v.toFixed(1) + "x", () => {}),
+    sliderRow("Text fade threshold", "fade", 0, 1, 0.01, (v) => v.toFixed(2), () => {}),
+  ]),
+  section("Forces", [
+    sliderRow("Center force", "center", 0, 1, 0.01, (v) => v.toFixed(2), reheat),
+    sliderRow("Repel force", "repel", 0, 400, 5, (v) => String(v), reheat),
+    sliderRow("Link force", "link", 0, 1.5, 0.05, (v) => v.toFixed(2), reheat),
+    sliderRow("Link distance", "dist", 10, 300, 5, (v) => String(v), reheat),
+    el("div", {}, resetBtn),
+  ]),
+);
+cfgBtn.addEventListener("click", () => { panel.hidden = !panel.hidden; cfgBtn.setAttribute("aria-pressed", String(!panel.hidden)); });
+
+/* ---------- toolbar and keys ---------- */
+const physBtn = $("#phys");
+function setPaused(v) {
+  paused = v; physBtn.setAttribute("aria-pressed", String(v));
+  physBtn.title = v ? "Resume physics (Space)" : "Pause physics (Space)"; physBtn.setAttribute("aria-label", v ? "Resume physics" : "Pause physics");
+  if (v) sim.stop(); else sim.alpha(0.3).restart();
+}
+physBtn.addEventListener("click", () => setPaused(!paused));
+$("#fit").addEventListener("click", () => fit(true));
+function setTheme(t) {
+  root.dataset.theme = t; try { localStorage.setItem("graph-theme", t); } catch (_) {}
+  readColors(); refreshSwatches(); dirty = true;
+}
+$("#theme").addEventListener("click", () => setTheme(root.dataset.theme === "light" ? "dark" : "light"));
+function refreshSwatches() { for (const c of comms) c.dotEl.style.background = c.color; if (selected) select(selected, false); }
+addEventListener("keydown", (e) => {
+  const typing = /^(input|textarea)$/i.test(document.activeElement && document.activeElement.tagName);
+  if (e.key === "/" && !typing) { e.preventDefault(); q.focus(); q.select(); }
+  else if (e.key === "Escape" && !typing) { if (selected) select(null); else if (!panel.hidden) cfgBtn.click(); }
+  else if ((e.key === "f" || e.key === "F") && !typing && !e.ctrlKey && !e.metaKey) fit(true);
+  else if (e.key === " " && !typing && (document.activeElement === document.body || document.activeElement === cv)) { e.preventDefault(); setPaused(!paused); }
+});
+
+/* ---------- start ---------- */
+$("#title").textContent = raw.__title || "Graph";
+$("#b-nodes").textContent = `${N.toLocaleString()} nodes`;
+$("#b-links").textContent = `${links.length.toLocaleString()} links`;
+$("#b-groups").textContent = `${comms.length.toLocaleString()} ${comms.length === 1 ? "group" : "groups"}`;
+cv.setAttribute("aria-label", `Interactive graph with ${N} nodes and ${links.length} links`);
+let stored = null; try { stored = localStorage.getItem("graph-theme"); } catch (_) {}
+root.dataset.theme = stored === "light" ? "light" : "dark";
+readColors(); refreshSwatches();
+if (!N) { $("#empty").hidden = false; hint.hidden = true; $("#cfg").disabled = true; $("#fit").disabled = true; $("#phys").disabled = true; }
+updateVisibility(); resize(); rebuild(0);
+// settle the layout off-screen first, then let it keep moving gently
+sim.stop();
+{ const t0 = performance.now(); for (let i = 0; i < 320 && performance.now() - t0 < 700; i++) sim.tick(); }
+fit(false);
+if (!reduceMotion) sim.alpha(0.12).restart();
+requestAnimationFrame(frame);
+window.__graph = { nodes, links, sim, get view() { return { tx, ty, k, W, H }; }, select, fit, setPaused, pick, get paused() { return paused; } };
+})();
+</script>
+</body>
+</html>

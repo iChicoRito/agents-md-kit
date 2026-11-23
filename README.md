@@ -129,6 +129,18 @@ curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/insta
 
 All versions and what changed: [Releases](https://github.com/iChicoRito/agents-md-kit/releases) and [CHANGELOG.md](CHANGELOG.md).
 
+## Graph view
+
+When a project has a graphify graph, the kit builds an interactive map of it: `graphify-out/graph.html`. Open it in any browser. It works offline.
+
+![Graph view of a code base: dots for code, thin lines for links, one color per group](assets/graph-view.png)
+
+- It looks and moves like Obsidian's graph view. Drag a node and the nodes linked to it follow along the lines.
+- Hover a node to light up its neighbors. Click it for details and a list of its connections.
+- Press `/` to search. Hide groups, and tune the forces (center, repel, link) in the settings panel. Dark and light themes.
+
+The installer builds the view right after it builds the graph. graphify writes its own `graph.html` every time it updates the graph, so to get this view back after `graphify update .`, run `agents-md-kit --graph-view` (PowerShell: `agents-md-kit -GraphView`). It needs Python 3.8 or newer, which graphify needs anyway.
+
 ## What you get
 
 **`claude`: Claude Code only**
@@ -214,6 +226,7 @@ Bash (Mac, Linux, Git Bash) uses `--option`. PowerShell uses `-Option`. **Option
 | Preview only, change nothing | `--dry-run` | `-DryRun` |
 | Add the short command `agents-md-kit` | `--add-command` | `-AddCommand` |
 | List the `[PLACEHOLDERS]` still left | `--check` | `-Check` |
+| Build the interactive graph view (`graphify-out/graph.html`) | `--graph-view` | `-GraphView` |
 | graphify without being asked: install if missing and build the graph, or skip it | `--graphify yes` / `--graphify no` | `-Graphify yes` / `-Graphify no` |
 | Show help | `--help` | `-Help` |
 | Typed answers instead of arrow keys | `AGENTS_MD_KIT_UI=plain` before `bash` | `$env:AGENTS_MD_KIT_UI = "plain"` first |
@@ -272,6 +285,7 @@ Open a new terminal after adding it, then:
 | Install into another folder | `agents-md-kit --for both "path/to/project"` | `agents-md-kit -For both "C:\path\to\project"` |
 | Preview only, change nothing | `agents-md-kit --dry-run` | `agents-md-kit -DryRun` |
 | List the placeholders still left | `agents-md-kit --check` | `agents-md-kit -Check` |
+| Build the interactive graph view | `agents-md-kit --graph-view` | `agents-md-kit -GraphView` |
 | Show help | `agents-md-kit --help` | `agents-md-kit -Help` |
 
 ## Contributing
