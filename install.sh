@@ -30,10 +30,12 @@ case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
   *) utf=""; [ "$(locale charmap 2>/dev/null || true)" = UTF-8 ] && utf=1 ;;
 esac
 if [ -n "$utf" ]; then
-  DOT="●"; PTR="❯"; ELB="└"; STAR="✻"; SEP="·"; UP="↑"; DN="↓"
+  DOT="●"; PTR="❯"; ELB="└"; TEE="├"; STAR="✻"; SEP="·"; UP="↑"; DN="↓"
+  SPIN=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
   TL="╭"; TR="╮"; BL="╰"; BR="╯"; H="─"; V="│"
 else
-  DOT="*"; PTR=">"; ELB="'-"; STAR="*"; SEP="-"; UP="up"; DN="down"
+  DOT="*"; PTR=">"; ELB="'-"; TEE="|-"; STAR="*"; SEP="-"; UP="up"; DN="down"
+  SPIN=('|' '/' '-' '\')
   TL="+"; TR="+"; BL="+"; BR="+"; H="-"; V="|"
 fi
 
@@ -41,6 +43,7 @@ say()  { printf '%s\n' "$*"; }
 fail() { printf '\n  %s%s Error:%s %s\n\n' "$RD$B" "$DOT" "$N" "$*" >&2; exit 1; }
 # done_line "<label>" "<value>" ["<note>"]: one finished step, like Claude Code's tool lines
 done_line() { printf '  %s%s%s %-9s %s%s%s%s\n' "$G" "$DOT" "$N" "$1" "$B" "$2" "$N" "${3:+ $D$SEP $3$N}"; }
+files() { if [ "$1" = 1 ]; then echo "1 file"; else echo "$1 files"; fi; }
 rule() { local s="" i; for ((i = 0; i < $1; i++)); do s+="$H"; done; printf '%s' "$s"; }
 
 # ---------- help ----------
@@ -108,7 +111,19 @@ cleanup() {
   [ -n "${tmp:-}" ] && rm -rf "$tmp"; return 0
 }
 trap cleanup EXIT
-trap 'exit 130' INT
+trap 'printf "\n\n  %s%s%s Cancelled. Files already copied stay; run again to finish.\n\n" "$Y" "$DOT" "$N"; exit 130' INT
+
+# spin "<text>" <pid>: animated spinner until the process ends (plain line without ANSI).
+spin() {
+  if [ -z "$ansi" ]; then printf '  %s %s...\n' "$DOT" "$1"; return; fi
+  local i=0
+  printf '\033[?25l'
+  while kill -0 "$2" 2>/dev/null; do
+    printf '\r  %s%s%s %s %s(%ds)%s' "$A" "${SPIN[i % ${#SPIN[@]}]}" "$N" "$1" "$D" $((i / 10)) "$N"
+    i=$((i + 1)); sleep 0.1
+  done
+  printf '\r\033[2K\033[?25h'
+}
 
 # choose "<question>" <default 1-based> "label|hint"...
 # Shows a menu, sets $answer to the chosen number, then collapses it to one line.
@@ -254,16 +269,16 @@ if [ -n "$script_dir" ] && [ -d "$script_dir/template/$choice" ]; then
   done_line "Template" "local copy"
 else
   tmp="$(mktemp -d)"
-  printf '  %s%s%s Downloading template...' "$A" "$DOT" "$N"
-  curl -fsSL "$archive" | tar -xz -C "$tmp" || { printf '\n'; fail "Could not download the template. Check your internet connection."; }
+  ( curl -fsSL "$archive" | tar -xz -C "$tmp" ) & dl=$!
+  spin "Downloading template from GitHub" "$dl"
+  wait "$dl" || fail "Could not download the template. Check your internet connection."
   template="$(find "$tmp" -mindepth 3 -maxdepth 3 -type d -path "*/template/$choice" | head -1)"
-  [ -d "$template" ] || { printf '\n'; fail "Download incomplete: template/$choice not found"; }
-  if [ -n "$ansi" ]; then printf '\r\033[2K'; else printf '\n'; fi
+  [ -d "$template" ] || fail "Download incomplete: template/$choice not found"
   done_line "Template" "downloaded" "latest from GitHub"
 fi
 
 # ---------- copy ----------
-copied=0; skipped=(); gi_status=""; gi_added=()
+copied=0; added=(); skipped=(); gi_status=""; gi_added=()
 while IFS= read -r -d '' f; do
   rel="${f#"$template"/}"
   dest="$target/$rel"
@@ -286,22 +301,34 @@ while IFS= read -r -d '' f; do
   if [ -e "$dest" ]; then skipped+=("$rel"); continue; fi
   mkdir -p "$(dirname "$dest")"
   cp "$f" "$dest"
-  copied=$((copied + 1))
-done < <(find "$template" -type f -print0)
+  copied=$((copied + 1)); added+=("$rel")
+done < <(find "$template" -type f -print0 | sort -z)
 
-# ---------- result ----------
-done_line "Copied" "$copied file(s)"
+# ---------- result: a small tree of what changed ----------
+done_line "Copied" "$(files "$copied")"
+rows=()   # each row: "<text>" already colored
+if [ $copied -gt 0 ]; then
+  # Group added files by top-level entry: folders show a count, files show their name.
+  while read -r cnt top; do
+    if [ "${top%/}" != "$top" ]; then rows+=("${G}+${N} $(printf '%-12s' "$top") ${D}$(files "$cnt")${N}")
+    else rows+=("${G}+${N} $top"); fi
+  done < <(printf '%s\n' "${added[@]}" | awk -F/ '{ print (NF > 1 ? $1 "/" : $1) }' | sort | uniq -c)
+fi
 if [ -n "$gi_status" ]; then
   if [ ${#gi_added[@]} -gt 0 ]; then
-    say "    ${D}${ELB}${N} .gitignore kept, ${G}+${#gi_added[@]} line(s)${N}: $(IFS=,; echo "${gi_added[*]}" | sed 's/,/, /g')"
+    rows+=("${G}~${N} .gitignore   ${D}kept, added: $(IFS=,; echo "${gi_added[*]}" | sed 's/,/, /g')${N}")
   else
-    say "    ${D}${ELB} .gitignore kept, nothing to add${N}"
+    rows+=("${D}= .gitignore   kept, nothing to add${N}")
   fi
 fi
-if [ ${#skipped[@]} -gt 0 ]; then
-  say "    ${D}${ELB}${N} ${Y}${#skipped[@]} file(s) already existed, left untouched. Merge by hand:${N}"
-  for s in "${skipped[@]}"; do say "        ${D}$s${N}"; done
-fi
+for s in "${skipped[@]+"${skipped[@]}"}"; do
+  rows+=("${Y}!${N} $(printf '%-12s' "$s") ${Y}already existed, left untouched${N}")
+done
+for ((i = 0; i < ${#rows[@]}; i++)); do
+  if [ $i -eq $((${#rows[@]} - 1)) ]; then br="$ELB"; else br="$TEE"; fi
+  say "    ${D}${br}${N} ${rows[i]}"
+done
+[ ${#skipped[@]} -gt 0 ] && say "      ${D}Files marked ! were kept as they are. Merge the kit's version by hand if you want it.${N}"
 
 main="CLAUDE.md"; [ "$choice" = agents ] && main="AGENTS.md"
 case "$choice" in claude) anchor="claude-code-only-claude" ;; agents) anchor="codex-or-other-agents-agents" ;; both) anchor="both-both" ;; esac

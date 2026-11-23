@@ -29,11 +29,15 @@ if ($vt) {
     $DOT = [string][char]0x25CF; $PTR = [string][char]0x276F; $ELB = [string][char]0x2514; $STAR = [string][char]0x273B
     $SEP = [string][char]0x00B7; $UP = [string][char]0x2191; $DN = [string][char]0x2193
     $TL = [string][char]0x256D; $TR = [string][char]0x256E; $BL = [string][char]0x2570; $BR = [string][char]0x256F
-    $H = [string][char]0x2500; $V = [string][char]0x2502
+    $H = [string][char]0x2500; $V = [string][char]0x2502; $TEE = [string][char]0x251C
+    $SPIN = @(0x280B, 0x2819, 0x2839, 0x2838, 0x283C, 0x2834, 0x2826, 0x2827, 0x2807, 0x280F | ForEach-Object { [string][char]$_ })
 } else {
     $DOT = "*"; $PTR = ">"; $ELB = "'-"; $STAR = "*"; $SEP = "-"; $UP = "up"; $DN = "down"
-    $TL = "+"; $TR = "+"; $BL = "+"; $BR = "+"; $H = "-"; $V = "|"
+    $TL = "+"; $TR = "+"; $BL = "+"; $BR = "+"; $H = "-"; $V = "|"; $TEE = "|-"
+    $SPIN = @("|", "/", "-", "\")
 }
+$state = @{ done = $false; failed = $false }   # for the "Cancelled" message on Ctrl+C
+function Format-Files([int]$Count) { if ($Count -eq 1) { "1 file" } else { "$Count files" } }
 
 function Write-Part([string]$Text, [string]$Style = "", [switch]$End) {
     if (-not $Style -or $noColor) { Write-Host $Text -NoNewline }
@@ -48,6 +52,7 @@ function Write-Done([string]$Label, [string]$Value, [string]$Note = "") {
     Write-Host ""
 }
 function Write-Fail([string]$Message) {
+    $state.failed = $true
     Write-Host ""; Write-Part "  $DOT Error: " Red; Write-Part $Message -End; Write-Host ""
 }
 
@@ -210,25 +215,38 @@ try {
     } else {
         $tmp = Join-Path ([IO.Path]::GetTempPath()) ("agents-md-kit-" + [guid]::NewGuid())
         New-Item -ItemType Directory -Path $tmp | Out-Null
-        Write-Part "  $DOT " Accent; Write-Part "Downloading template..."
+        $text = "Downloading template from GitHub"
+        if (-not $vt) { Write-Part "  $DOT $text..." -End }
         try {
             [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            $ProgressPreference = 'SilentlyContinue'
-            Invoke-WebRequest -Uri $archive -OutFile "$tmp\kit.zip" -UseBasicParsing
-            Expand-Archive -Path "$tmp\kit.zip" -DestinationPath $tmp
+            $wc = New-Object Net.WebClient
+            $task = $wc.DownloadFileTaskAsync($archive, "$tmp\kit.zip")
+            if ($vt) {
+                # Animated spinner while the download runs, like Claude Code's status line.
+                try { [Console]::CursorVisible = $false } catch {}
+                for ($i = 0; -not $task.IsCompleted; $i++) {
+                    Write-Host "`r" -NoNewline; Write-Part $SPIN[$i % $SPIN.Count] Accent; Write-Part " $text "; Write-Part "($([int][Math]::Floor($i / 10))s)" Dim
+                    Start-Sleep -Milliseconds 100
+                }
+                Write-Host "`r$E[2K" -NoNewline
+                try { [Console]::CursorVisible = $true } catch {}
+            } else { $task.Wait() }
+            if ($task.IsFaulted) { throw $task.Exception }
+            Add-Type -AssemblyName System.IO.Compression.FileSystem
+            [IO.Compression.ZipFile]::ExtractToDirectory("$tmp\kit.zip", $tmp)
         } catch {
-            Write-Host ""; Write-Fail "Could not download the template. Check your internet connection."; return
+            if ($vt) { Write-Host "`r$E[2K" -NoNewline; try { [Console]::CursorVisible = $true } catch {} }
+            Write-Fail "Could not download the template. Check your internet connection."; return
         }
         $Template = (Get-ChildItem -Path $tmp -Directory | ForEach-Object { Join-Path $_.FullName "template\$For" } |
             Where-Object { Test-Path $_ } | Select-Object -First 1)
-        if (-not $Template) { Write-Host ""; Write-Fail "Download incomplete: template\$For not found"; return }
-        if ($vt) { Write-Host "`r$E[2K" -NoNewline } else { Write-Host "" }
+        if (-not $Template) { Write-Fail "Download incomplete: template\$For not found"; return }
         Write-Done "Template" "downloaded" "latest from GitHub"
     }
 
     # ---------- copy ----------
-    $copied = 0; $skipped = @(); $gitignoreAdded = $null
-    Get-ChildItem -Path $Template -Recurse -Force -File | ForEach-Object {
+    $copied = 0; $added = @(); $skipped = @(); $gitignoreAdded = $null
+    Get-ChildItem -Path $Template -Recurse -Force -File | Sort-Object FullName | ForEach-Object {
         $rel = $_.FullName.Substring($Template.Length).TrimStart('\', '/')
         $dest = Join-Path $Target $rel
         if ($rel -eq 'PROMPT.md' -and $Prompt -eq 'no') { return }
@@ -249,22 +267,27 @@ try {
         if (Test-Path $dest) { $skipped += $rel; return }
         New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
         Copy-Item -LiteralPath $_.FullName -Destination $dest
-        $copied++
+        $copied++; $added += $rel
     }
 
-    # ---------- result ----------
-    Write-Done "Copied" "$copied file(s)"
+    # ---------- result: a small tree of what changed ----------
+    Write-Done "Copied" (Format-Files $copied)
+    $rows = @()   # each row: list of @(text, style) parts
+    $added | Group-Object { $p = $_ -split '[\\/]'; if ($p.Count -gt 1) { $p[0] + "/" } else { $p[0] } } | Sort-Object Name | ForEach-Object {
+        if ($_.Name.EndsWith("/")) { $rows += , @(@("+ ", "Green"), @($_.Name.PadRight(13), ""), @((Format-Files $_.Count), "Dim")) }
+        else { $rows += , @(@("+ ", "Green"), @($_.Name, "")) }
+    }
     if ($null -ne $gitignoreAdded) {
-        if ($gitignoreAdded.Count) {
-            Write-Part "    $ELB " Dim; Write-Part ".gitignore kept, "; Write-Part "+$($gitignoreAdded.Count) line(s)" Green; Write-Part ": $($gitignoreAdded -join ', ')" -End
-        } else {
-            Write-Part "    $ELB .gitignore kept, nothing to add" Dim -End
-        }
+        if ($gitignoreAdded.Count) { $rows += , @(@("~ ", "Green"), @(".gitignore".PadRight(13), ""), @("kept, added: $($gitignoreAdded -join ', ')", "Dim")) }
+        else { $rows += , @(@("= .gitignore   kept, nothing to add", "Dim")) }
     }
-    if ($skipped.Count) {
-        Write-Part "    $ELB " Dim; Write-Part "$($skipped.Count) file(s) already existed, left untouched. Merge by hand:" Yellow -End
-        $skipped | ForEach-Object { Write-Part "        $_" Dim -End }
+    foreach ($s in $skipped) { $rows += , @(@("! ", "Yellow"), @($s.PadRight(13), ""), @("already existed, left untouched", "Yellow")) }
+    for ($i = 0; $i -lt $rows.Count; $i++) {
+        Write-Part ("    " + $(if ($i -eq $rows.Count - 1) { $ELB } else { $TEE }) + " ") Dim
+        foreach ($part in $rows[$i]) { Write-Part $part[0] $part[1] }
+        Write-Host ""
     }
+    if ($skipped.Count) { Write-Part "      Files marked ! were kept as they are. Merge the kit's version by hand if you want it." Dim -End }
 
     # ---------- next steps ----------
     $main = if ($For -eq "agents") { "AGENTS.md" } else { "CLAUDE.md" }
@@ -298,6 +321,11 @@ try {
     Write-Host ""
     Write-Part "  $DOT " Green; Write-Part "Done." Bold; Write-Part " Guide: $repo/blob/main/GUIDE.md" Dim -End
     Write-Host ""
+    $state.done = $true
 } finally {
+    if (-not $state.done -and -not $state.failed) {
+        try { [Console]::CursorVisible = $true } catch {}
+        Write-Host ""; Write-Host ""; Write-Part "  $DOT Cancelled. Files already copied stay; run again to finish." Yellow -End; Write-Host ""
+    }
     if ($tmp) { Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue }
 }
