@@ -32,6 +32,9 @@ The most important file. It tells the AI what the project is, how the folders ar
 **`AGENTS.md`: a signpost for other AI tools**
 Codex and some other AI tools look for `AGENTS.md`, not `CLAUDE.md`. This file only says "read `CLAUDE.md` and follow it". Every AI follows the same instructions, and you keep only one file up to date. Do not put project details here.
 
+**`PROMPT.md`: the fill-in prompt**
+A ready prompt for your version. Tell your AI `Read PROMPT.md and do what it says.` and it fills the `[PLACEHOLDERS]` from your code. Delete it when you are done, or keep it to run again after big changes. Agents do not load it on their own.
+
 **`.gitignore`: files git leaves out**
 It keeps two personal files out of git:
 - `.claude/settings.local.json`: your own Claude settings
@@ -122,7 +125,7 @@ In the steps below, "main file" means `CLAUDE.md` (`claude` and `both` versions)
    - Move your existing instructions into the kit's `CLAUDE.md` layout. Keep only short, every-session information.
    - Move long details (architecture, API notes) into the right `docs/` file.
    - Make `AGENTS.md` the short signpost to `CLAUDE.md`.
-3. **Let the AI fill in the placeholders.** It can read your code. Copy the prompt for your version from [PROMPTS.md](PROMPTS.md) and paste it into your agent. The prompt also merges your old instructions and lists every TODO it could not fill.
+3. **Let the AI fill in the placeholders.** It can read your code. Tell your agent `Read PROMPT.md and do what it says.` (or copy the prompt from [PROMPTS.md](PROMPTS.md)). The prompt also merges your old instructions and lists every TODO it could not fill.
 4. **Fill in `docs/` one area at a time.** For example:
    > Read the API code and fill in docs/api/README.md and docs/api/openapi.yaml.
 

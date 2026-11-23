@@ -70,6 +70,7 @@ See all options: add `--help` (Bash) or `-Help` (PowerShell) to the command.
 
 ```text
 CLAUDE.md          main instructions
+PROMPT.md          prompt that makes your AI fill the placeholders
 .gitignore         keeps personal Claude files out of git
 .claude/
   rules/           how Claude should work (loaded automatically)
@@ -83,6 +84,7 @@ docs/              architecture, API, database, guides, decisions
 
 ```text
 AGENTS.md          main instructions
+PROMPT.md          prompt that makes your AI fill the placeholders
 .agents/
   rules/           how agents should work (AGENTS.md lists them)
   skills/          skills made only for this project
@@ -94,6 +96,7 @@ docs/              architecture, API, database, guides, decisions
 ```text
 CLAUDE.md          main instructions (all agents)
 AGENTS.md          pointer: tells Codex to read CLAUDE.md
+PROMPT.md          prompt that makes your AI fill the placeholders
 .gitignore         keeps personal Claude files out of git
 .claude/
   rules/           how agents should work
@@ -115,7 +118,10 @@ docs/              architecture, API, database, guides, decisions
 
 ## After install
 
-1. Fill the `[PLACEHOLDERS]` in the main file (`CLAUDE.md`, or `AGENTS.md` for the `agents` version) and in `docs/`. **Copy the ready prompt for your version from [PROMPTS.md](PROMPTS.md)** and paste it into your AI agent. It reads your code and fills everything in:
+1. Fill the `[PLACEHOLDERS]` in the main file (`CLAUDE.md`, or `AGENTS.md` for the `agents` version) and in `docs/`. The installer adds `PROMPT.md` with the ready prompt for your version. Tell your AI agent:
+   > Read PROMPT.md and do what it says.
+
+   It reads your code and fills everything in. The same prompts are online in [PROMPTS.md](PROMPTS.md):
    - [Claude Code only](PROMPTS.md#claude-code-only-claude)
    - [Codex or other agents](PROMPTS.md#codex-or-other-agents-agents)
    - [Both](PROMPTS.md#both-both)

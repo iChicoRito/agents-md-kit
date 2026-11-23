@@ -2,6 +2,8 @@
 
 After you install the kit in an **existing project**, copy the prompt for your version and paste it into your AI agent. The agent reads your code and fills the `[PLACEHOLDERS]` for you.
 
+The installer also puts your version's prompt in the project as `PROMPT.md`. You can just tell your agent: `Read PROMPT.md and do what it says.`
+
 Not sure which version you installed?
 
 - You have `CLAUDE.md` and **no** `AGENTS.md`: use [Claude Code only](#claude-code-only-claude).
@@ -36,7 +38,7 @@ Rules:
 6. Do not copy rules from .claude/rules/ into CLAUDE.md.
 7. If the project already had its own instructions (an older CLAUDE.md, CLAUDE.local.md, README sections for developers, or similar), merge the useful parts: short facts into CLAUDE.md, long details into docs/. Tell me what you merged.
 8. If a folder has its own conventions, suggest a short <folder>/CLAUDE.md, but ask me before creating it.
-9. Do not change any code. Do not commit.
+9. Do not change any code. Do not commit. Do not edit PROMPT.md.
 
 When you finish, give me a short report: what you filled, what you merged, and every TODO left for me.
 ```
@@ -64,7 +66,7 @@ Rules:
 7. Do not copy rules from .agents/rules/ into AGENTS.md.
 8. If the project already had its own instructions (an older AGENTS.md, README sections for developers, or similar), merge the useful parts: short facts into AGENTS.md, long details into docs/. Tell me what you merged.
 9. If a folder has its own conventions, suggest a short <folder>/AGENTS.md, but ask me before creating it.
-10. Do not change any code. Do not commit.
+10. Do not change any code. Do not commit. Do not edit PROMPT.md.
 
 When you finish, give me a short report: what you filled, what you merged, and every TODO left for me.
 ```
@@ -98,7 +100,7 @@ Rules:
 7. Do not copy rules from .claude/rules/ into CLAUDE.md.
 8. If the project already had its own instructions (an older CLAUDE.md, an older AGENTS.md with real content, CLAUDE.local.md, README sections for developers, or similar), merge the useful parts: short facts into CLAUDE.md, long details into docs/. Then make AGENTS.md the short pointer to CLAUDE.md again. Tell me what you merged.
 9. If a folder has its own conventions, suggest a short <folder>/CLAUDE.md plus a <folder>/AGENTS.md that points to it, but ask me before creating them.
-10. Do not change any code. Do not commit.
+10. Do not change any code. Do not commit. Do not edit PROMPT.md.
 
 When you finish, give me a short report: what you filled, what you merged, and every TODO left for me.
 ```

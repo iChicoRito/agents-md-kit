@@ -155,8 +155,17 @@ main="CLAUDE.md"; [ "$choice" = agents ] && main="AGENTS.md"
 say ""
 say "  ${B}Next steps${N}"
 case "$choice" in claude) anchor="claude-code-only-claude" ;; agents) anchor="codex-or-other-agents-agents" ;; both) anchor="both-both" ;; esac
-say "    1. Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N}. Copy this prompt for your AI:"
-say "       ${C}https://github.com/iChicoRito/agents-md-kit/blob/main/PROMPTS.md#$anchor${N}"
+prompt_url="https://github.com/iChicoRito/agents-md-kit/blob/main/PROMPTS.md#$anchor"
+prompt_skipped=""; for s in "${skipped[@]+"${skipped[@]}"}"; do [ "$s" = "PROMPT.md" ] && prompt_skipped=1; done
+if [ -n "$prompt_skipped" ]; then
+  say "    1. Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N}."
+  say "       ${Y}Your project already had a PROMPT.md, so the kit's prompt was not added.${N}"
+  say "       Copy the prompt from: ${C}$prompt_url${N}"
+else
+  say "    1. Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N}. Tell your AI:"
+  say "       ${C}Read PROMPT.md and do what it says.${N}"
+  say "       ${D}(or copy the prompt from PROMPT.md. Online: $prompt_url)${N}"
+fi
 say "    2. Install the skills: ${B}docs/guides/setup.md${N}"
 if [ "$choice" = agents ]; then
   say "    3. Start your agent and ask it to read ${B}AGENTS.md${N}"

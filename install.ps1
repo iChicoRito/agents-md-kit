@@ -154,8 +154,17 @@ try {
     Write-Host ""
     Write-Part "  Next steps" White -End
     $anchor = @{ claude = "claude-code-only-claude"; agents = "codex-or-other-agents-agents"; both = "both-both" }[$For]
-    Write-Part "    1. Fill the [PLACEHOLDERS] in "; Write-Part $main White; Write-Part " and "; Write-Part "docs/" White; Write-Part ". Copy this prompt for your AI:" -End
-    Write-Part "       https://github.com/iChicoRito/agents-md-kit/blob/main/PROMPTS.md#$anchor" Cyan -End
+    $promptUrl = "https://github.com/iChicoRito/agents-md-kit/blob/main/PROMPTS.md#$anchor"
+    Write-Part "    1. Fill the [PLACEHOLDERS] in "; Write-Part $main White; Write-Part " and "; Write-Part "docs/" White
+    if ($skipped -contains "PROMPT.md") {
+        Write-Part "." -End
+        Write-Part "       Your project already had a PROMPT.md, so the kit's prompt was not added." Yellow -End
+        Write-Part "       Copy the prompt from: "; Write-Part $promptUrl Cyan -End
+    } else {
+        Write-Part ". Tell your AI:" -End
+        Write-Part "       Read PROMPT.md and do what it says." Cyan -End
+        Write-Part "       (or copy the prompt from PROMPT.md. Online: $promptUrl)" DarkGray -End
+    }
     Write-Part "    2. Install the skills: "; Write-Part "docs/guides/setup.md" White -End
     if ($For -eq "agents") {
         Write-Part "    3. Start your agent and ask it to read "; Write-Part "AGENTS.md" White -End
