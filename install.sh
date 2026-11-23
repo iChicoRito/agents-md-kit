@@ -327,7 +327,7 @@ if [ -z "$want_version" ] && [ -n "$script_dir" ] && [ -d "$script_dir/template/
   done_line "Template" "local copy"
 else
   tmp="$(mktemp -d)"
-  ( curl -fsSL "$archive" | tar -xz -C "$tmp" ) & dl=$!
+  ( curl -fsSL "$archive" 2>/dev/null | tar -xz -C "$tmp" 2>/dev/null ) & dl=$!   # errors: own message below
   spin "Downloading template from GitHub" "$dl"
   if ! wait "$dl"; then
     [ -n "$want_version" ] && fail "Version $want_version not found. See $repo/releases"
