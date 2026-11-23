@@ -1,0 +1,20 @@
+# Records the README demo GIF from assets/demo.tape. Run it by hand after UI changes:
+# GitHub > Actions > "demo gif" > Run workflow. The GIF is saved as an artifact to download.
+name: demo gif
+
+on:
+  workflow_dispatch:
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Record with VHS
+        uses: charmbracelet/vhs-action@v2
+        with:
+          path: assets/demo.tape
+      - uses: actions/upload-artifact@v4
+        with:
+          name: demo-gif
+          path: assets/demo.gif
