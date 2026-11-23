@@ -29,6 +29,8 @@ If it cannot ask (for example in a script), it uses `both` and detects new or ex
 
 Open a terminal **in your project folder** and run one command. It asks which version you want.
 
+Pick each answer with the arrow keys and Enter (or press its number). Terminals without arrow-key support get numbered questions to type instead.
+
 **Windows (PowerShell)**
 
 ```powershell
@@ -64,6 +66,8 @@ curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/insta
 No git needed. The installer downloads the template and copies it in.
 
 See all options: add `--help` (Bash) or `-Help` (PowerShell) to the command.
+
+Prefer typed answers? Set `AGENTS_MD_KIT_UI=plain` before running. `NO_COLOR=1` turns colors off.
 
 **Safe for existing projects**
 

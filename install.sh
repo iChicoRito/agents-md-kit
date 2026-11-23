@@ -8,28 +8,48 @@
 #   --for claude|agents|both    which agents (default: both)
 #   --project new|existing      new/empty or existing project (default: detected from the folder)
 #   --prompt yes|no             add PROMPT.md (existing: always yes; new: default no)
+# Environment: NO_COLOR=1 turns colors off. AGENTS_MD_KIT_UI=plain uses typed answers instead of arrow-key menus.
 # Never overwrites: files that already exist are skipped and listed.
 # Exception: an existing .gitignore is kept and only missing lines are added.
 set -euo pipefail
 
 archive="https://github.com/iChicoRito/agents-md-kit/archive/refs/heads/main.tar.gz"
+repo="https://github.com/iChicoRito/agents-md-kit"
 
-# ---------- output style (colors only on a real terminal, off with NO_COLOR) ----------
-if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
-  B=$'\033[1m'; D=$'\033[2m'; G=$'\033[32m'; Y=$'\033[33m'; C=$'\033[36m'; RD=$'\033[31m'; N=$'\033[0m'
+# ---------- output style ----------
+# ansi: a real terminal that understands cursor codes (needed for menus).
+# Colors only on such a terminal, and off with NO_COLOR. Unicode symbols only in a UTF-8 locale.
+ansi=""; [ -t 1 ] && [ "${TERM:-}" != dumb ] && ansi=1
+if [ -n "$ansi" ] && [ -z "${NO_COLOR:-}" ]; then
+  B=$'\033[1m'; D=$'\033[2m'; G=$'\033[32m'; Y=$'\033[33m'; RD=$'\033[31m'; A=$'\033[38;5;173m'; N=$'\033[0m'
 else
-  B=""; D=""; G=""; Y=""; C=""; RD=""; N=""
+  B=""; D=""; G=""; Y=""; RD=""; A=""; N=""
 fi
-say()  { printf '%s\n' "$*"; }
-step() { printf '  %s>%s %s\n' "$C" "$N" "$*"; }
-fail() { printf '\n  %sError:%s %s\n\n' "$RD$B" "$N" "$*" >&2; exit 1; }
+case "${LC_ALL:-${LC_CTYPE:-${LANG:-}}}" in
+  *UTF-8*|*utf8*|*UTF8*|*utf-8*) utf=1 ;;
+  *) utf=""; [ "$(locale charmap 2>/dev/null || true)" = UTF-8 ] && utf=1 ;;
+esac
+if [ -n "$utf" ]; then
+  DOT="●"; PTR="❯"; ELB="└"; STAR="✻"; SEP="·"; UP="↑"; DN="↓"
+  TL="╭"; TR="╮"; BL="╰"; BR="╯"; H="─"; V="│"
+else
+  DOT="*"; PTR=">"; ELB="'-"; STAR="*"; SEP="-"; UP="up"; DN="down"
+  TL="+"; TR="+"; BL="+"; BR="+"; H="-"; V="|"
+fi
 
+say()  { printf '%s\n' "$*"; }
+fail() { printf '\n  %s%s Error:%s %s\n\n' "$RD$B" "$DOT" "$N" "$*" >&2; exit 1; }
+# done_line "<label>" "<value>" ["<note>"]: one finished step, like Claude Code's tool lines
+done_line() { printf '  %s%s%s %-9s %s%s%s%s\n' "$G" "$DOT" "$N" "$1" "$B" "$2" "$N" "${3:+ $D$SEP $3$N}"; }
+rule() { local s="" i; for ((i = 0; i < $1; i++)); do s+="$H"; done; printf '%s' "$s"; }
+
+# ---------- help ----------
 usage() {
   cat <<EOF
 
-  ${B}agents-md-kit${N} installer
+  ${A}${STAR}${N} ${B}agents-md-kit${N} ${D}installer${N}
 
-  Usage: install.sh [options] [target folder]
+  ${B}Usage${N}  install.sh [options] [target folder]
 
     --for claude          Claude Code only        CLAUDE.md + .claude/
     --for agents          Codex / other agents    AGENTS.md + .agents/
@@ -41,7 +61,7 @@ usage() {
     --prompt yes|no       add PROMPT.md, the prompt that makes your AI fill
                           the placeholders (existing: always added; new: default no)
 
-  Options you leave out are asked. Target folder: current folder if not given.
+  ${D}Options you leave out are asked. Target folder: current folder if not given.${N}
 
 EOF
 }
@@ -75,8 +95,72 @@ detected=existing
 # ---------- questions (only when someone can answer) ----------
 can_ask=""
 if { exec 3</dev/tty; } 2>/dev/null; then can_ask=1; fi
+# Arrow-key menus need an ANSI terminal and a keyboard that can switch to key-by-key mode;
+# otherwise answers are typed.
+menus=""; old_stty=""
+if [ -n "$can_ask" ] && [ -n "$ansi" ] && [ "${AGENTS_MD_KIT_UI:-}" != plain ] \
+  && old_stty="$(stty -g <&3 2>/dev/null)" && [ -n "$old_stty" ]; then
+  menus=1
+fi
 
-# ask "<prompt>" <default> <valid answers...>; result in $answer
+cleanup() {
+  if [ -n "$menus" ]; then printf '\033[?25h'; stty "$old_stty" 2>/dev/null <&3 || true; fi
+  [ -n "${tmp:-}" ] && rm -rf "$tmp"; return 0
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+
+# choose "<question>" <default 1-based> "label|hint"...
+# Shows a menu, sets $answer to the chosen number, then collapses it to one line.
+choose() {
+  local question="$1" sel="$2"; shift 2
+  local opts=("$@") n=$# i key rest lab hint
+  if [ -z "$menus" ]; then
+    say ""; say "  ${B}$question${N}"; say ""
+    for ((i = 0; i < n; i++)); do
+      lab="${opts[i]%%|*}"; hint="${opts[i]#*|}"
+      printf '    %s%d%s  %-24s %s%s%s\n' "$A" $((i + 1)) "$N" "$lab" "$D" "$hint" "$N"
+    done
+    say ""
+    ask "Choose [1-$n, Enter = $sel]:" "$sel" $(seq 1 "$n")
+    return
+  fi
+  draw() {
+    for ((i = 0; i < n; i++)); do
+      lab="${opts[i]%%|*}"; hint="${opts[i]#*|}"
+      if [ $((i + 1)) -eq "$sel" ]; then
+        printf '\033[2K  %s%s %d. %-24s%s %s%s%s\n' "$A" "$PTR" $((i + 1)) "$lab" "$N" "$D" "$hint" "$N"
+      else
+        printf '\033[2K    %d. %-24s %s%s%s\n' $((i + 1)) "$lab" "$D" "$hint" "$N"
+      fi
+    done
+    printf '\033[2K\n\033[2K  %s%s/%s move %s Enter select %s 1-%d pick %s Ctrl+C quit%s\n' \
+      "$D" "$UP" "$DN" "$SEP" "$SEP" "$n" "$SEP" "$N"
+  }
+  printf '\033[?25l'
+  say ""; say "  ${B}$question${N}"; say ""
+  draw
+  # Key-by-key input without echo. One dd read gets a whole key, arrow sequences included
+  # (bash's read -n1 splits and loses them in Git Bash on Windows).
+  stty -echo -icanon min 1 time 0 <&3
+  while :; do
+    key="$(dd bs=8 count=1 2>/dev/null <&3)" || break
+    case "$key" in
+      $'\033[A'|$'\033OA'|k) [ "$sel" -gt 1 ] && sel=$((sel - 1)) ;;
+      $'\033[B'|$'\033OB'|j) [ "$sel" -lt "$n" ] && sel=$((sel + 1)) ;;
+      [1-9]) if [ "$key" -le "$n" ]; then sel="$key"; break; fi ;;
+      ''|$'\r') break ;;   # Enter ($(...) drops the newline)
+    esac
+    printf '\033[%dA' $((n + 2)); draw
+  done
+  stty "$old_stty" <&3
+  # Erase question + menu (blank, question, blank, n options, blank, hint) and keep one answer line.
+  printf '\033[%dA\033[J' $((n + 5))
+  printf '\033[?25h'
+  answer="$sel"
+}
+
+# ask "<prompt>" <default> <valid answers...>; result in $answer (typed fallback)
 ask() {
   local text="$1" def="$2"; shift 2
   local tries=0 a v
@@ -92,80 +176,90 @@ ask() {
   done
 }
 
+# ---------- welcome ----------
+w=50
 say ""
-say "  ${B}agents-md-kit${N}  ${D}AI agent setup for your project${N}"
-say "  ${D}--------------------------------------------------${N}"
+say "  ${A}${TL}$(rule $w)${TR}${N}"
+printf '  %s%s%s %s%s%s %sWelcome to agents-md-kit%s%*s%s%s%s\n' "$A" "$V" "$N" "$A" "$STAR" "$N" "$B" "$N" $((w - 27)) "" "$A" "$V" "$N"
+printf '  %s%s%s%*s%s%s%s\n' "$A" "$V" "$N" $w "" "$A" "$V" "$N"
+printf '  %s%s%s   %sAI agent setup for Claude Code and Codex%s%*s%s%s%s\n' "$A" "$V" "$N" "$D" "$N" $((w - 43)) "" "$A" "$V" "$N"
+say "  ${A}${BL}$(rule $w)${BR}${N}"
+say ""
+show_target="$target"; [ -n "${HOME:-}" ] && case "$target" in "$HOME"*) show_target="~${target#"$HOME"}" ;; esac
+say "  ${D}Folder: $show_target${N}"
+[ -n "$menus" ] && say "  ${D}Pick with arrow keys. Nothing is overwritten.${N}" || say "  ${D}Nothing is overwritten.${N}"
+[ -n "$can_ask" ] && [ -z "$menus" ] || say ""   # typed questions bring their own blank line
 
 if [ -z "$choice" ]; then
   if [ -n "$can_ask" ]; then
-    say ""
-    say "  ${B}Which AI agents will you use in this project?${N}"
-    say ""
-    say "    ${C}1${N}  Claude Code only         ${D}CLAUDE.md + .claude/${N}"
-    say "    ${C}2${N}  Codex / other agents     ${D}AGENTS.md + .agents/${N}"
-    say "    ${C}3${N}  Both ${G}(recommended)${N}       ${D}CLAUDE.md + AGENTS.md + both folders${N}"
-    say ""
-    ask "Choose [1-3, Enter = 3]:" 3 1 2 3
+    choose "Which AI agents will you use in this project?" 3 \
+      "Claude Code only|CLAUDE.md + .claude/" \
+      "Codex / other agents|AGENTS.md + .agents/" \
+      "Both (recommended)|CLAUDE.md + AGENTS.md + both folders"
     case "$answer" in 1) choice=claude ;; 2) choice=agents ;; *) choice=both ;; esac
   else
     choice=both
   fi
 fi
+case "$choice" in
+  claude) label="Claude Code only" ;; agents) label="Codex / other agents" ;; both) label="Claude Code + Codex" ;;
+esac
+done_line "Agents" "$choice" "$label"
 
 if [ -z "$project" ]; then
   if [ -n "$can_ask" ]; then
-    if [ "$detected" = new ]; then def=1; note="this folder looks empty"; else def=2; note="this folder already has files"; fi
-    say ""
-    say "  ${B}Is this a new or an existing project?${N}"
-    say ""
-    say "    ${C}1${N}  New / empty project      ${D}you fill the files as you build${N}"
-    say "    ${C}2${N}  Existing project         ${D}adds PROMPT.md so your AI fills them from your code${N}"
-    say ""
-    ask "Choose [1-2, Enter = $def, $note]:" "$def" 1 2
+    if [ "$detected" = new ]; then def=1; else def=2; fi
+    choose "Is this a new or an existing project?" "$def" \
+      "New / empty project|you fill the files as you build$([ $def = 1 ] && echo " $SEP this folder looks empty")" \
+      "Existing project|your AI fills them from your code$([ $def = 2 ] && echo " $SEP this folder has files")"
     case "$answer" in 1) project=new ;; *) project=existing ;; esac
   else
     project="$detected"
   fi
 fi
+done_line "Project" "$project"
 
+prompt_note=""
 if [ "$project" = existing ]; then
-  [ "$prompt" = no ] && say "  ${Y}Existing project: PROMPT.md is always added.${N}"
+  [ "$prompt" = no ] && prompt_note="always added for existing projects"
   prompt=yes
 elif [ -z "$prompt" ]; then
   if [ -n "$can_ask" ]; then
-    say ""
-    say "  ${D}PROMPT.md makes your AI fill the placeholders from your code. Useful after your first features exist.${N}"
-    ask "Add PROMPT.md for later? [y/N]:" n y n yes no
-    case "$answer" in y|yes) prompt=yes ;; *) prompt=no ;; esac
+    if [ -n "$menus" ]; then
+      choose "Add PROMPT.md for later?" 2 \
+        "Yes|your AI fills the placeholders from your code" \
+        "No|copy the prompt from GitHub later"
+      case "$answer" in 1) prompt=yes ;; *) prompt=no ;; esac
+    else
+      say ""
+      say "  ${D}PROMPT.md makes your AI fill the placeholders from your code. Useful after your first features exist.${N}"
+      ask "Add PROMPT.md for later? [y/N]:" n y n yes no
+      case "$answer" in y|yes) prompt=yes ;; *) prompt=no ;; esac
+    fi
   else
     prompt=no
   fi
 fi
 [ -n "$can_ask" ] && exec 3<&-
-
-case "$choice" in
-  claude) label="Claude Code only" ;; agents) label="Codex / other agents" ;; both) label="Claude Code + Codex" ;;
-esac
-say ""
-step "Version:  ${B}$choice${N} ${D}($label)${N}"
-step "Project:  ${B}$project${N}"
-step "Prompt:   ${B}$prompt${N} ${D}(PROMPT.md)${N}"
-step "Target:   $target"
+done_line "PROMPT.md" "$prompt" "$prompt_note"
 
 # ---------- find or download the template ----------
 script_dir=""
 if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fi
+say ""
 if [ -n "$script_dir" ] && [ -d "$script_dir/template/$choice" ]; then
   template="$script_dir/template/$choice"
+  done_line "Template" "local copy"
 else
-  tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
-  printf '  %s>%s Download: ' "$C" "$N"
-  curl -fsSL "$archive" | tar -xz -C "$tmp" || { say "${RD}failed${N}"; fail "Could not download the template. Check your internet connection."; }
+  tmp="$(mktemp -d)"
+  printf '  %s%s%s Downloading template...' "$A" "$DOT" "$N"
+  curl -fsSL "$archive" | tar -xz -C "$tmp" || { printf '\n'; fail "Could not download the template. Check your internet connection."; }
   template="$(find "$tmp" -mindepth 3 -maxdepth 3 -type d -path "*/template/$choice" | head -1)"
-  [ -d "$template" ] || { say "${RD}failed${N}"; fail "Download incomplete: template/$choice not found"; }
-  say "${G}done${N}"
+  [ -d "$template" ] || { printf '\n'; fail "Download incomplete: template/$choice not found"; }
+  if [ -n "$ansi" ]; then printf '\r\033[2K'; else printf '\n'; fi
+  done_line "Template" "downloaded" "latest from GitHub"
 fi
 
 # ---------- copy ----------
@@ -195,50 +289,50 @@ while IFS= read -r -d '' f; do
   copied=$((copied + 1))
 done < <(find "$template" -type f -print0)
 
-# ---------- summary ----------
-say ""
-say "  ${B}Result${N}"
-say "    ${G}+${N} $copied file(s) added"
+# ---------- result ----------
+done_line "Copied" "$copied file(s)"
 if [ -n "$gi_status" ]; then
   if [ ${#gi_added[@]} -gt 0 ]; then
-    say "    ${G}~${N} .gitignore kept, ${#gi_added[@]} line(s) added: $(IFS=,; echo "${gi_added[*]}" | sed 's/,/, /g')"
+    say "    ${D}${ELB}${N} .gitignore kept, ${G}+${#gi_added[@]} line(s)${N}: $(IFS=,; echo "${gi_added[*]}" | sed 's/,/, /g')"
   else
-    say "    ${D}=${N} .gitignore kept, nothing to add"
+    say "    ${D}${ELB} .gitignore kept, nothing to add${N}"
   fi
 fi
 if [ ${#skipped[@]} -gt 0 ]; then
-  say "    ${Y}!${N} ${#skipped[@]} file(s) already existed, left untouched. Merge by hand:"
+  say "    ${D}${ELB}${N} ${Y}${#skipped[@]} file(s) already existed, left untouched. Merge by hand:${N}"
   for s in "${skipped[@]}"; do say "        ${D}$s${N}"; done
 fi
 
 main="CLAUDE.md"; [ "$choice" = agents ] && main="AGENTS.md"
 case "$choice" in claude) anchor="claude-code-only-claude" ;; agents) anchor="codex-or-other-agents-agents" ;; both) anchor="both-both" ;; esac
-prompt_url="https://github.com/iChicoRito/agents-md-kit/blob/main/PROMPTS.md#$anchor"
+prompt_url="$repo/blob/main/PROMPTS.md#$anchor"
 prompt_skipped=""; for s in "${skipped[@]+"${skipped[@]}"}"; do [ "$s" = "PROMPT.md" ] && prompt_skipped=1; done
 
+# ---------- next steps ----------
 say ""
-say "  ${B}Next steps${N}"
+say "  ${A}${STAR}${N} ${B}Next steps${N}"
+say ""
 if [ "$prompt" = yes ] && [ -n "$prompt_skipped" ]; then
-  say "    1. Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N}."
+  say "    ${A}1${N}  Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N}."
   say "       ${Y}Your project already had a PROMPT.md, so the kit's prompt was not added.${N}"
-  say "       Copy the prompt from: ${C}$prompt_url${N}"
+  say "       Copy the prompt from: ${A}$prompt_url${N}"
 elif [ "$project" = existing ]; then
-  say "    1. Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N}. Tell your AI:"
-  say "       ${C}Read PROMPT.md and do what it says.${N}"
-  say "       ${D}(or copy the prompt from PROMPT.md. Online: $prompt_url)${N}"
+  say "    ${A}1${N}  Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N}. Tell your AI:"
+  say "       ${A}${PTR}${N} ${B}Read PROMPT.md and do what it says.${N}"
 elif [ "$prompt" = yes ]; then
-  say "    1. Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N} as you build."
-  say "       After your first features exist, tell your AI: ${C}Read PROMPT.md and do what it says.${N}"
+  say "    ${A}1${N}  Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N} as you build."
+  say "       After your first features exist, tell your AI:"
+  say "       ${A}${PTR}${N} ${B}Read PROMPT.md and do what it says.${N}"
 else
-  say "    1. Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N} as you build."
-  say "       ${D}Later, to let your AI fill them from your code, copy the prompt: $prompt_url${N}"
+  say "    ${A}1${N}  Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N} as you build."
+  say "       ${D}Later, to let your AI fill them from your code: $prompt_url${N}"
 fi
-say "    2. Install the skills: ${B}docs/guides/setup.md${N}"
+say "    ${A}2${N}  Install the skills: ${B}docs/guides/setup.md${N}"
 if [ "$choice" = agents ]; then
-  say "    3. Start your agent and ask it to read ${B}AGENTS.md${N}"
+  say "    ${A}3${N}  Start your agent and ask it to read ${B}AGENTS.md${N}"
 else
-  say "    3. In Claude Code, run ${B}/memory${N} and ${B}/skills${N} to check what loads"
+  say "    ${A}3${N}  In Claude Code, run ${B}/memory${N} and ${B}/skills${N} to check what loads"
 fi
 say ""
-say "  ${G}${B}Done.${N} ${D}Guide: https://github.com/iChicoRito/agents-md-kit/blob/main/GUIDE.md${N}"
+say "  ${G}${DOT}${N} ${B}Done.${N} ${D}Guide: $repo/blob/main/GUIDE.md${N}"
 say ""
