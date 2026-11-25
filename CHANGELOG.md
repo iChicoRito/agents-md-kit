@@ -9,6 +9,17 @@ All notable changes to agents-md-kit. Versions follow [semantic versioning](http
 3. Commit, push, wait for the tests to pass.
 4. Tag and publish: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`.
 
+## 2.0.0 - 2026-11-26
+
+- **graphify support removed.** The kit no longer mentions, installs, configures or builds anything for graphify. The installer never asks about it, never runs `graphify`, and never writes a graph view. Projects that want a code graph install graphify themselves.
+- Removed: the `--graphify` / `-Graphify` option, the graphify step at the end of the install, the `graphify.md` rule (all three templates), the "Graphify (optional)" section in `docs/guides/setup.md`, and the graphify rows in the skills tables.
+- Removed: the graph view (`--graph-view` / `-GraphView`, `--force-view` / `-ForceView`), `tools/graph-view/`, and its tests. A graph viewer belongs with the graph tool, not with the instruction kit.
+- Unchanged and still true: the kit copies an instruction file, rules, and docs. Nothing else.
+- New installer question: install or update the primary skills (Superpowers, Ponytail, Caveman) from their official repos. Default No. Skip the question with `--skills yes|no` (PowerShell: `-Skills`).
+- Claude Code (`claude`, `both`): installs the plugins from the official repos (`obra/superpowers`, `DietrichGebert/ponytail`, `JuliusBrussee/caveman`) with `claude plugin install`, so the automatic modes work. A plugin already installed is only updated. A skill already in `~/.claude/skills` is skipped, to avoid a second copy.
+- Codex (`agents`, `both`): installs the plain skills with `npx skills add --agent codex`. It fetches the latest, so existing skills are updated.
+- Installing the skills now shows a progress bar, like the file copy. The bar counts steps; the running step moves toward its end but only completes when it really finishes.
+
 ## 1.7.1 - 2026-11-25
 
 - Fix: `--force-view` / `-ForceView` ran before the file copy and exited, so a project got `tools/graph-view/` and `.graphifyrc` but no `CLAUDE.md`, `AGENTS.md` or `docs/`: a half-installed kit. It now runs after the copy, so the full kit and the viewer land together.
@@ -20,13 +31,6 @@ All notable changes to agents-md-kit. Versions follow [semantic versioning](http
 - The graph view now writes `graphify-out/graph-view.html` instead of `graphify-out/graph.html`. graphify owns `graph.html` and rewrites it on every `graphify update .`, its git hooks and full rebuilds, so the kit's view was silently replaced by graphify's default vis-network page. With its own file name the custom view survives all of them. `--graph-view` / `-GraphView` still rebuilds it on demand, and now leaves `graph.html` untouched.
 - Tests: the installer checks that it writes `graph-view.html`, never `graph.html`, and that an existing `graph.html` is left alone. `--force-view` is covered by 13 checks per suite, including that an edited `template.html` survives a second run and that `.graphifyrc` is never replaced.
 - Known limit: `.graphifyrc` only affects graphify's git hooks, so a bare `graphify update .` in your own shell still renders `graph.html`. Passing `GRAPHIFY_VIZ_NODE_LIMIT=0` works for a manual run, which is what `refresh.py` does.
-
-## Unreleased
-
-- New installer question: install or update the primary skills (Superpowers, Ponytail, Caveman) from their official repos. Default No. Skip the question with `--skills yes|no` (PowerShell: `-Skills`).
-- Claude Code (`claude`, `both`): installs the plugins from the official repos (`obra/superpowers`, `DietrichGebert/ponytail`, `JuliusBrussee/caveman`) with `claude plugin install`, so the automatic modes work. A plugin already installed is only updated. A skill already in `~/.claude/skills` is skipped, to avoid a second copy.
-- Codex (`agents`, `both`): installs the plain skills with `npx skills add --agent codex`. It fetches the latest, so existing skills are updated.
-- Installing graphify, building the graph and installing the skills now show a progress bar, like the file copy. The bar counts steps; the running step moves toward its end but only completes when it really finishes.
 
 ## 1.6.0 - 2026-11-23
 

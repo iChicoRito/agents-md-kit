@@ -9,7 +9,6 @@ A small, scalable instruction setup for AI coding agents. One command adds it to
 - One main instruction file, kept under 200 lines.
 - Working rules, one topic per file.
 - `docs/` for architecture, API, database and guides. Agents open these only when a task needs them.
-- Works with [graphify](https://pypi.org/project/graphifyy/): when a project has a knowledge graph, the AI queries it instead of reading the whole codebase. Optional, and a rule file tells the agent how.
 
 New here? Read the **[guide](GUIDE.md)**: what every file does, and how to use the kit on a new or existing project.
 
@@ -95,7 +94,6 @@ Prefer typed answers? Set `AGENTS_MD_KIT_UI=plain` before running. `NO_COLOR=1` 
 - It never overwrites a file. Files that already exist are skipped and listed, so you can merge them by hand.
 - It keeps an existing `.gitignore` and adds only the missing lines at the end.
 - Running it again changes nothing.
-- It asks before it touches graphify. At the end it offers to install the official [graphify](https://pypi.org/project/graphifyy/) if it is missing, then offers to build the code graph. Both default to No. In scripts there is no question: nothing is installed or built unless you pass `--graphify yes`.
 - Not sure? Add `--dry-run` (Bash) or `-DryRun` (PowerShell) first. It shows what would be added, merged or skipped, and changes nothing.
 
 **Update a project that already has the kit**
@@ -128,41 +126,6 @@ curl -fsSL https://raw.githubusercontent.com/iChicoRito/agents-md-kit/main/insta
 ```
 
 All versions and what changed: [Releases](https://github.com/iChicoRito/agents-md-kit/releases) and [CHANGELOG.md](CHANGELOG.md).
-
-## Graph view
-
-When a project has a graphify graph, the kit builds an interactive map of it: `graphify-out/graph-view.html`. Open it in any browser. It works offline.
-
-![Graph view of a code base: dots for code, thin lines for links, one color per group](assets/graph-view.png)
-
-- It looks and moves like Obsidian's graph view. Drag a node and the nodes linked to it follow along the lines.
-- Hover a node to light up its neighbors. Click it for details and a list of its connections.
-- Press `/` to search. Hide groups, and tune the forces (center, repel, link) in the settings panel. Dark and light themes.
-
-The installer builds the view right after it builds the graph. The file name is `graph-view.html` on purpose: graphify owns `graph.html` and rewrites it on every `graphify update .`, so a view written there would be lost. With its own name, this view survives graphify updates, hooks and rebuilds. Rebuild it any time with `agents-md-kit --graph-view` (PowerShell: `agents-md-kit -GraphView`). It needs Python 3.8 or newer, which graphify needs anyway.
-
-### Force your design to be the only view
-
-`--graph-view` keeps two pages side by side: graphify's `graph.html` and the kit's `graph-view.html`. If you want your design to be the only HTML graph, and want to edit it, run once:
-
-```
-agents-md-kit --force-view
-```
-
-```
-agents-md-kit -ForceView
-```
-
-That command:
-
-- copies the viewer into `tools/graph-view/` (`template.html`, `graph_view.py`, `refresh.py`, vendor), so the design is yours and the kit never overwrites your edits;
-- writes `viz_node_limit=0` to `.graphifyrc`, so graphify's git hooks stop rendering `graph.html`;
-- removes any existing `graphify-out/graph.html`, leaving one HTML view;
-- builds the view from your copy.
-
-From then on, refresh with `python tools/graph-view/refresh.py`. It updates the graph with `GRAPHIFY_VIZ_NODE_LIMIT=0` (the only setting a manual `graphify update .` honors) and rebuilds the view from your template. Change the look in `tools/graph-view/template.html`, then `python tools/graph-view/refresh.py --no-graph`.
-
-Coupling worth knowing: the cache, queries, report and hooks all read `graph.json`, and nothing reads either HTML file, so removing graphify's page changes no other feature. `.graphifyrc` only affects graphify's **git hooks**; a bare `graphify update .` in your own shell still renders `graph.html`, which is why `refresh.py` sets the environment variable itself. If a `graph.html` appears, it came from a bare update: delete it, or run `refresh.py`, which removes it.
 
 ## What you get
 
@@ -216,7 +179,6 @@ docs/              architecture, API, database, guides, decisions
   - `claude` and `both`: six plugins (Superpowers, Ponytail, Caveman, mattpocock-skills, ux-ui-agent-skills, unslop-ui) install when you open the project in Claude Code. The Caveman skills and design skills are installed by hand with `npx skills add`.
   - `agents`: all skills are installed with `npx skills add`.
 - Optional: the installer can install or update the primary skills (Superpowers, Ponytail, Caveman) from their official repos. It asks first (default No), or use `--skills yes|no`. Claude Code gets the plugins (needs the `claude` command), Codex gets the plain skills (needs Node.js).
-- Optional: graphify, for a queryable knowledge graph of your code (`uv tool install graphifyy`). Steps in `docs/guides/setup.md`.
 
 ## After install
 
@@ -250,9 +212,6 @@ Bash (Mac, Linux, Git Bash) uses `--option`. PowerShell uses `-Option`. **Option
 | Preview only, change nothing | `--dry-run` | `-DryRun` |
 | Add the short command `agents-md-kit` | `--add-command` | `-AddCommand` |
 | List the `[PLACEHOLDERS]` still left | `--check` | `-Check` |
-| Build the interactive graph view (`graphify-out/graph-view.html`) | `--graph-view` | `-GraphView` |
-| Force your design to be the only HTML graph | `--force-view` | `-ForceView` |
-| graphify without being asked: install if missing and build the graph, or skip it | `--graphify yes` / `--graphify no` | `-Graphify yes` / `-Graphify no` |
 | Show help | `--help` | `-Help` |
 | Typed answers instead of arrow keys | `AGENTS_MD_KIT_UI=plain` before `bash` | `$env:AGENTS_MD_KIT_UI = "plain"` first |
 | No colors | `NO_COLOR=1` before `bash` | `$env:NO_COLOR = "1"` first |
@@ -310,8 +269,6 @@ Open a new terminal after adding it, then:
 | Install into another folder | `agents-md-kit --for both "path/to/project"` | `agents-md-kit -For both "C:\path\to\project"` |
 | Preview only, change nothing | `agents-md-kit --dry-run` | `agents-md-kit -DryRun` |
 | List the placeholders still left | `agents-md-kit --check` | `agents-md-kit -Check` |
-| Build the interactive graph view | `agents-md-kit --graph-view` | `agents-md-kit -GraphView` |
-| Force your design to be the only HTML graph | `agents-md-kit --force-view` | `agents-md-kit -ForceView` |
 | Show help | `agents-md-kit --help` | `agents-md-kit -Help` |
 
 ## Contributing

@@ -24,7 +24,6 @@ Skills in `.agents/skills/`. None yet. Add a row for each new one. (Skills in `.
 | Bug or test failure: find the cause before fixing | `superpowers:systematic-debugging` |
 | Before saying work is done or fixed | `superpowers:verification-before-completion` |
 | Any coding task: smallest change that fully solves it | `ponytail:ponytail` |
-| Question about how the code works or how parts connect (needs a graph, see `graphify.md`) | `graphify` |
 | Review a change | `ponytail:ponytail-review` |
 | Design, redesign, or polish any UI | `impeccable` |
 | UI choices: style, color, fonts, layout | `ui-ux-pro-max` |

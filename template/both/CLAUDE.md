@@ -14,7 +14,6 @@ Follow every file in `.claude/rules/`. Claude Code loads them automatically. Oth
 - `.claude/rules/git.md`
 - `.claude/rules/check-work.md`
 - `.claude/rules/plain-language.md`
-- `.claude/rules/graphify.md`
 
 # Docs
 

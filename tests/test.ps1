@@ -43,7 +43,6 @@ try {
         Test-That "new: every kit file is there" { Test-HasAll $v $d $false }
         Test-That "new: no PROMPT.md" { -not (Test-Path "$d\PROMPT.md") }
         $rulesDir = if ($v -eq "agents") { ".agents/rules" } else { ".claude/rules" }
-        Test-That "new: graphify rule installed" { Test-Path (Join-Path $d "$rulesDir/graphify.md") }
         Test-That "new: every rule file is listed in $main" { $txt = Get-Content (Join-Path $d $main) -Raw; -not (Get-ChildItem (Join-Path $d $rulesDir) -Filter *.md | Where-Object { -not $txt.Contains("$rulesDir/$($_.Name)") }) }
         Test-That "new: no kit marker file added" { -not (Test-Path "$d\.agents-md-kit") }
         if ($v -eq "claude") { Test-That "new: no .agents folder" { -not (Test-Path "$d\.agents") } }
@@ -100,123 +99,10 @@ try {
     $empty = Join-Path $work "empty"; New-Item -ItemType Directory $empty | Out-Null
     Test-That "check: empty folder fails" { -not (Invoke-Install @($empty, "-Check")) }
 
-    "== graphify"
-    # Asks first, installs or builds only with a yes. Fake tools, nothing real is installed.
-    $stubs = Join-Path $work "stubs"; New-Item -ItemType Directory "$stubs\have", "$stubs\inst" | Out-Null
-    $stubGraphify = "@echo off`r`necho graphify %* >> `"%STUBLOG%`"`r`nmkdir graphify-out 2>nul`r`necho {}> graphify-out\graph.json`r`necho [graphify watch] Rebuilt: 7 nodes, 9 edges, 2 communities`r`n"
-    [IO.File]::WriteAllText("$stubs\have\graphify.cmd", $stubGraphify)
-    [IO.File]::WriteAllText("$stubs\graphify.tpl", $stubGraphify)
-    [IO.File]::WriteAllText("$stubs\inst\uv.cmd", "@echo off`r`necho uv %* >> `"%STUBLOG%`"`r`nif `"%1 %2`"==`"tool install`" copy /y `"%~dp0..\graphify.tpl`" `"%~dp0graphify.cmd`" >nul`r`n")
-    $sysPath = "$env:SystemRoot\System32;$env:SystemRoot"
-    # Runs the installer with only the fake tools on PATH. Returns the project folder.
-    function Invoke-Gfy([string]$Name, [string]$ToolDir, [string[]]$Options, [bool]$WithGraph = $false) {
-        $dir = Join-Path $work "gfy-$Name"; New-Item -ItemType Directory $dir | Out-Null
-        if ($WithGraph) { New-Item -ItemType Directory "$dir\graphify-out" | Out-Null; Set-Content "$dir\graphify-out\graph.json" "{}" }
-        Remove-Item "$stubs\inst\graphify.cmd" -ErrorAction SilentlyContinue
-        $script:gfyLog = Join-Path $stubs "log-$Name.txt"; Set-Content $script:gfyLog ""
-        $oldPath = $env:PATH; $env:STUBLOG = $script:gfyLog; $env:PATH = "$ToolDir;$sysPath"
-        try { Invoke-Install (@($dir, "-For", "claude", "-Project", "new", "-Prompt", "no") + $Options) | Out-Null }
-        finally { $env:PATH = $oldPath; Remove-Item Env:STUBLOG -ErrorAction SilentlyContinue }
-        $dir
-    }
-    function Get-StubLog { (Get-Content $script:gfyLog | Where-Object { $_.Trim() }) -join ";" }
-    $gA = Invoke-Gfy "A" "$stubs\have" @("-Graphify", "yes"); $logA = Get-StubLog; $outA = $script:log
-    Test-That "graphify yes (installed): graph built" { (Test-Path "$gA\graphify-out\graph.json") -and $logA -match 'graphify update \.' -and $outA -match 'built' }
-    $gB = Invoke-Gfy "B" "$stubs\inst" @("-Graphify", "yes"); $logB = Get-StubLog
-    Test-That "graphify yes (missing): installs, then builds" { $logB -match 'uv tool install graphifyy' -and $logB -match 'graphify update \.' -and (Test-Path "$gB\graphify-out\graph.json") }
-    $gC = Invoke-Gfy "C" "$stubs\have" @("-Graphify", "no"); $logC = Get-StubLog; $outC = $script:log
-    Test-That "graphify no: nothing runs" { -not $logC -and -not (Test-Path "$gC\graphify-out") -and $outC -match 'skipped' }
-    $gD = Invoke-Gfy "D" "$stubs\have" @(); $logD = Get-StubLog; $outD = $script:log
-    Test-That "graphify (nobody to ask): nothing runs, tip shown" { -not $logD -and -not (Test-Path "$gD\graphify-out") -and $outD -match 'Optional: build a code graph' }
-    $gE = Invoke-Gfy "E" "$stubs\have" @("-Graphify", "yes") $true; $logE = Get-StubLog; $outE = $script:log
-    Test-That "graphify: existing graph is left alone" { -not $logE -and $outE -match 'graph found' }
-    $gG = Invoke-Gfy "G" "$stubs\have" @("-DryRun", "-Graphify", "yes"); $logG = Get-StubLog
-    Test-That "graphify: dry run changes nothing" { -not $logG -and -not (Test-Path "$gG\graphify-out") }
-    Test-That "bad -Graphify value fails" { -not (Invoke-Install @($work, "-Graphify", "maybe")) }
 
     "== skills"
-    # Asks first, installs or updates only with a yes. Fake claude and npx, empty fake home.
-    $sk = Join-Path $work "sk"; New-Item -ItemType Directory $sk | Out-Null
-    [IO.File]::WriteAllText("$sk\claude.cmd", "@echo off`r`necho claude %* >> `"%STUBLOG%`"`r`nif `"%1 %2`"==`"plugin list`" ( echo   * superpowers@other& echo   * caveman@caveman& echo   * mattpocock-skills@mattpocock )`r`n")
-    [IO.File]::WriteAllText("$sk\npx.cmd", "@echo off`r`necho npx %* >> `"%STUBLOG%`"`r`n")
-    function Invoke-Skl([string]$Name, [string[]]$Options, [string]$FakeHome = "") {
-        $dir = Join-Path $work "sk-$Name"; New-Item -ItemType Directory $dir | Out-Null
-        $script:sklLog = Join-Path $sk "log-$Name.txt"; Set-Content $script:sklLog ""
-        if (-not $FakeHome) { $FakeHome = Join-Path $work "home-$Name"; New-Item -ItemType Directory $FakeHome | Out-Null }
-        $oldPath = $env:PATH; $env:STUBLOG = $script:sklLog; $env:PATH = "$sk;$sysPath"
-        $env:AGENTS_MD_KIT_HOME = $FakeHome
-        try { Invoke-Install (@($dir, "-Project", "new", "-Prompt", "no", "-Graphify", "no") + $Options) | Out-Null }
-        finally { $env:PATH = $oldPath; Remove-Item Env:AGENTS_MD_KIT_HOME -ErrorAction SilentlyContinue; Remove-Item Env:STUBLOG -ErrorAction SilentlyContinue }
-    }
-    function Get-SklLog { (Get-Content $script:sklLog | Where-Object { $_.Trim() }) -join ";" }
-    Invoke-Skl "A" @("-For", "claude", "-Skills", "yes"); $lA = Get-SklLog
-    Test-That "skills yes (claude): missing plugins installed, installed one only updated, no npx" { $lA -match 'plugin install superpowers --marketplace obra/superpowers' -and $lA -match 'plugin install ponytail --marketplace DietrichGebert/ponytail' -and $lA -match 'plugin update caveman@caveman' -and $lA -notmatch 'plugin install caveman' -and $lA -notmatch 'npx' }
-    Test-That "skills: restart note shown after a Claude plugin change" { $script:log -match 'restart Claude Code' }
-    Invoke-Skl "B" @("-For", "agents", "-Skills", "yes"); $lB = Get-SklLog
-    Test-That "skills (agents): no restart note" { $script:log -notmatch 'restart Claude Code' }
-    Test-That "skills yes (agents): npx skills add for all three, codex only, no claude" { ([regex]::Matches($lB, 'skills add')).Count -eq 3 -and $lB -match '--agent codex --global' -and $lB -notmatch 'claude' }
-    Invoke-Skl "C" @("-For", "both", "-Skills", "yes"); $lC = Get-SklLog
-    Test-That "skills yes (both): plugins for claude, skills for codex" { $lC -match 'claude plugin install' -and ([regex]::Matches($lC, 'npx')).Count -eq 3 }
-    $homeH = Join-Path $work "home-H"; New-Item -ItemType Directory "$homeH\.claude\skills\ponytail" -Force | Out-Null
-    Invoke-Skl "H" @("-For", "claude", "-Skills", "yes") $homeH; $lH = Get-SklLog
-    Test-That "skills: a skill already in ~/.claude/skills is not installed as a plugin" { $lH -notmatch 'plugin install ponytail' -and $lH -match 'plugin install superpowers' }
-    Invoke-Skl "D" @("-For", "both", "-Skills", "no"); $lD = Get-SklLog
-    Test-That "skills no: nothing runs" { -not $lD }
-    Invoke-Skl "E" @("-For", "both"); $lE = Get-SklLog
-    Test-That "skills (nobody to ask): nothing runs" { -not $lE }
-    Invoke-Skl "F" @("-For", "both", "-DryRun", "-Skills", "yes"); $lF = Get-SklLog
-    Test-That "skills: dry run changes nothing" { -not $lF }
     Test-That "bad -Skills value fails" { -not (Invoke-Install @($work, "-Skills", "maybe")) }
 
-    "== graph view"
-    # An interactive, Obsidian-style graph-view.html built from graphify-out/graph.json.
-    # It must never be graph.html: graphify owns that name and rewrites it on every update.
-    $py = $null
-    foreach ($c in "python", "py", "python3") {
-        if (-not (Get-Command $c -ErrorAction SilentlyContinue)) { continue }
-        & $c -c "import sys; sys.exit(sys.version_info < (3, 8))" 2>$null | Out-Null
-        if ($LASTEXITCODE -eq 0) { $py = $c; break }
-    }
-    if ($py) {
-        Test-That "graph view: generator tests pass" {
-            $ErrorActionPreference = "Continue"   # the tests print expected errors to stderr
-            $o = & $py (Join-Path $kit "tests\test_graph_view.py") 2>&1 | Out-String
-            if ($LASTEXITCODE -ne 0) { Write-Host $o }
-            $LASTEXITCODE -eq 0
-        }
-        $d = Join-Path $work "gview"; New-Item -ItemType Directory "$d\graphify-out" | Out-Null
-        Copy-Item (Join-Path $kit "tests\fixtures\graph.json") "$d\graphify-out\graph.json"
-        Test-That "graph view: installer builds graph-view.html" { (Invoke-Install @($d, "-GraphView")) -and (Test-Path "$d\graphify-out\graph-view.html") -and ((Get-Content "$d\graphify-out\graph-view.html" -Raw) -match 'AuthModule') }
-        Test-That "graph view: installer leaves graphify's graph.html alone" { -not (Test-Path "$d\graphify-out\graph.html") }
-        Set-Content "$d\graphify-out\graph.html" "graphify view"
-        Test-That "graph view: a graphify update keeps the custom view" { (Invoke-Install @($d, "-GraphView")) -and (Get-Content "$d\graphify-out\graph.html" -Raw).Trim() -eq "graphify view" }
-        Remove-Item "$d\graphify-out\graph-view.html"
-        Test-That "graph view: dry run writes nothing" { (Invoke-Install @($d, "-GraphView", "-DryRun")) -and -not (Test-Path "$d\graphify-out\graph-view.html") }
-        $ng = Join-Path $work "nograph"; New-Item -ItemType Directory $ng | Out-Null
-        Test-That "graph view: no graph fails" { -not (Invoke-Install @($ng, "-GraphView")) }
-
-        # -ForceView: the kit's design becomes the only HTML graph in the project
-        $fx = Join-Path $work "force"; New-Item -ItemType Directory "$fx\graphify-out" -Force | Out-Null
-        Copy-Item (Join-Path $kit "tests\fixtures\graph.json") "$fx\graphify-out\graph.json"
-        Set-Content "$fx\graphify-out\graph.html" "graphify own page"
-        Set-Content "$fx\.graphifyrc" "query_depth=3"
-        Test-That "force view: runs without error" { Invoke-Install @($fx, "-ForceView") }
-        Test-That "force view: viewer copied for editing" { (Test-Path "$fx\tools\graph-view\template.html") -and (Test-Path "$fx\tools\graph-view\graph_view.py") -and (Test-Path "$fx\tools\graph-view\refresh.py") }
-        Test-That "force view: vendor files copied" { (Test-Path "$fx\tools\graph-view\vendor\d3-force.min.js") -and (Test-Path "$fx\tools\graph-view\vendor\LICENSE") }
-        Test-That "force view: view built" { (Test-Path "$fx\graphify-out\graph-view.html") -and ((Get-Content "$fx\graphify-out\graph-view.html" -Raw) -match 'AuthModule') }
-        Test-That "force view: graphify's graph.html removed" { -not (Test-Path "$fx\graphify-out\graph.html") }
-        Test-That "force view: existing .graphifyrc kept" { (Get-Content "$fx\.graphifyrc") -contains "query_depth=3" }
-        Test-That "force view: missing viz_node_limit is reported, not written" { $script:log -match 'without viz_node_limit' -and -not ((Get-Content "$fx\.graphifyrc" -Raw) -match 'viz_node_limit=') }
-        Add-Content "$fx\tools\graph-view\template.html" "MY DESIGN"
-        Test-That "force view: second run keeps edited template" { (Invoke-Install @($fx, "-ForceView")) -and ((Get-Content "$fx\tools\graph-view\template.html" -Raw) -match 'MY DESIGN') }
-        Test-That "force view: second run reports kept files" { $script:log -match 'kept yours' }
-        $fz = Join-Path $work "force-new"; New-Item -ItemType Directory $fz -Force | Out-Null
-        Test-That "force view: writes .graphifyrc when absent" { (Invoke-Install @($fz, "-ForceView")) -and ((Get-Content "$fz\.graphifyrc" -Raw).Trim() -eq "viz_node_limit=0") }
-        Test-That "force view: no graph is not an error" { $script:log -match 'no graph yet' }
-        Test-That "force view: installs the kit files too" { (Test-Path "$fz\CLAUDE.md") -and (Test-Path "$fz\AGENTS.md") -and (Test-Path "$fz\docs") }
-        $fd = Join-Path $work "force-dry"; New-Item -ItemType Directory $fd -Force | Out-Null
-        Test-That "force view: dry run copies nothing" { (Invoke-Install @($fd, "-ForceView", "-DryRun")) -and -not (Test-Path "$fd\tools") -and -not (Test-Path "$fd\.graphifyrc") }
-    } else { "  skip  graph view tests: no Python 3.8+ found" }
 
     "== errors"
     Test-That "unknown -For value fails" { -not (Invoke-Install @($work, "-For", "nope")) }

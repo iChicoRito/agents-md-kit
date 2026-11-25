@@ -14,7 +14,6 @@ Follow every file in `.agents/rules/`. Read them at the start of each task:
 - `.agents/rules/git.md`
 - `.agents/rules/check-work.md`
 - `.agents/rules/plain-language.md`
-- `.agents/rules/graphify.md`
 
 # Docs
 

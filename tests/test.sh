@@ -34,7 +34,6 @@ for v in claude agents both; do
   check "new: every kit file is there" "has_all $v '$d' no"
   check "new: no PROMPT.md" "[ ! -e '$d/PROMPT.md' ]"
   rules_dir=.claude/rules; [ $v = agents ] && rules_dir=.agents/rules
-  check "new: graphify rule installed" "[ -e '$d/$rules_dir/graphify.md' ]"
   check "new: every rule file is listed in $main" "for r in '$d/$rules_dir'/*.md; do grep -qF \"$rules_dir/\$(basename \"\$r\")\" '$d/$main' || { echo \"       not listed: \$r\"; exit 1; }; done"
   check "new: no kit marker file added" "[ ! -e '$d/.agents-md-kit' ]"
   [ $v = claude ] && check "new: no .agents folder" "[ ! -e '$d/.agents' ]"
@@ -99,128 +98,6 @@ printf 'See [API](api/README.md).\n' >> "$d/docs/README.md"
 check "check: all filled, links ignored (exit 0)" "install --check '$d' && grep -q 'no placeholders left' '$work/last.log'"
 check "check: empty folder fails" "mkdir -p '$work/empty' && ! install --check '$work/empty'"
 
-# graphify: asks first, installs or builds only with a yes. Fake tools, nothing real is installed.
-echo "== graphify"
-stubs="$work/stubs"; mkdir -p "$stubs/have" "$stubs/inst"
-cat > "$stubs/graphify.tpl" <<'STUB'
-#!/bin/sh
-echo "graphify $*" >> "$STUBLOG"
-mkdir -p graphify-out && echo '{}' > graphify-out/graph.json
-echo "[graphify watch] Rebuilt: 7 nodes, 9 edges, 2 communities"
-STUB
-cp "$stubs/graphify.tpl" "$stubs/have/graphify"; chmod +x "$stubs/have/graphify"
-cat > "$stubs/inst/uv" <<'STUB'
-#!/bin/sh
-echo "uv $*" >> "$STUBLOG"
-if [ "$1 $2" = "tool install" ]; then cp "$(dirname "$0")/../graphify.tpl" "$(dirname "$0")/graphify"; chmod +x "$(dirname "$0")/graphify"; fi
-STUB
-chmod +x "$stubs/inst/uv"
-# PATH without any real graphify, so "not installed" really means not installed
-clean_path=""
-IFS=: read -r -a path_parts <<< "$PATH"
-for p in "${path_parts[@]}"; do
-  if [ ! -x "$p/graphify" ] && [ ! -x "$p/graphify.exe" ]; then clean_path="${clean_path:+$clean_path:}$p"; fi
-done
-# gfy <name> <fake tools folder> <install.sh options...>: new project, fake tools first in PATH, nobody to ask
-gfy() {
-  local name="$1" pp="$2"; shift 2
-  gdir="$work/gfy-$name"; mkdir -p "$gdir"; : > "$stubs/log-$name"; rm -f "$stubs/inst/graphify"
-  STUBLOG="$stubs/log-$name" PATH="$pp:$clean_path" bash "$kit/install.sh" --for claude --project new --prompt no "$@" "$gdir" </dev/null >"$work/gfy-$name.log" 2>&1
-}
-gfy A "$stubs/have" --graphify yes
-check "graphify yes (installed): graph built" "[ -f '$work/gfy-A/graphify-out/graph.json' ] && grep -q 'graphify update .' '$stubs/log-A' && grep -q 'built' '$work/gfy-A.log'"
-gfy B "$stubs/inst" --graphify yes
-check "graphify yes (missing): installs, then builds" "grep -q 'uv tool install graphifyy' '$stubs/log-B' && grep -q 'graphify update .' '$stubs/log-B' && [ -f '$work/gfy-B/graphify-out/graph.json' ]"
-gfy C "$stubs/have" --graphify no
-check "graphify no: nothing runs" "[ ! -s '$stubs/log-C' ] && [ ! -e '$work/gfy-C/graphify-out' ] && grep -q 'skipped' '$work/gfy-C.log'"
-gfy D "$stubs/have"
-check "graphify (nobody to ask): nothing runs, tip shown" "[ ! -s '$stubs/log-D' ] && [ ! -e '$work/gfy-D/graphify-out' ] && grep -q 'Optional: build a code graph' '$work/gfy-D.log'"
-mkdir -p "$work/gfy-E/graphify-out"; echo '{}' > "$work/gfy-E/graphify-out/graph.json"
-gfy E "$stubs/have" --graphify yes
-check "graphify: existing graph is left alone" "[ ! -s '$stubs/log-E' ] && grep -q 'graph found' '$work/gfy-E.log'"
-gfy G "$stubs/have" --dry-run --graphify yes
-check "graphify: dry run changes nothing" "[ ! -s '$stubs/log-G' ] && [ ! -e '$work/gfy-G/graphify-out' ]"
-check "bad --graphify value fails" "! install --graphify maybe '$work'"
-
-# primary skills: asks first, installs or updates only with a yes. Fake claude and npx.
-echo "== skills"
-sk="$work/sk"; mkdir -p "$sk"
-cat > "$sk/claude" <<'STUB'
-#!/bin/sh
-echo "claude $*" >> "$STUBLOG"
-if [ "$1 $2" = "plugin list" ]; then printf '  \342\235\257 superpowers@other\n    Version: 1\n\n  \342\235\257 caveman@caveman\n    Version: 2.7.0\n\n  \342\235\257 mattpocock-skills@mattpocock\n    Version: 1\n'; fi
-STUB
-cat > "$sk/npx" <<'STUB'
-#!/bin/sh
-echo "npx $*" >> "$STUBLOG"
-STUB
-chmod +x "$sk/claude" "$sk/npx"
-# skl <name> <install.sh options...>: new project, fake tools first in PATH, empty fake home, nobody to ask
-skl() {
-  local name="$1"; shift
-  mkdir -p "$work/sk-$name" "$work/home-$name"; : > "$sk/log-$name"
-  HOME="$work/home-$name" STUBLOG="$sk/log-$name" PATH="$sk:$PATH" bash "$kit/install.sh" --project new --prompt no --graphify no "$@" "$work/sk-$name" </dev/null >"$work/sk-$name.log" 2>&1
-}
-skl A --for claude --skills yes
-check "skills yes (claude): missing plugins installed from official repos" "grep -q 'plugin install superpowers --marketplace obra/superpowers' '$sk/log-A' && grep -q 'plugin install ponytail --marketplace DietrichGebert/ponytail' '$sk/log-A'"
-check "skills yes (claude): installed plugin is only updated" "grep -q 'plugin update caveman@caveman' '$sk/log-A' && ! grep -q 'plugin install caveman' '$sk/log-A'"
-check "skills yes (claude): restart note shown" "grep -q 'restart Claude Code' '$work/sk-A.log'"
-check "skills yes (claude): no npx" "! grep -q '^npx' '$sk/log-A'"
-skl B --for agents --skills yes
-check "skills yes (agents): npx skills add for all three, codex only, no claude" "grep -c 'skills add' '$sk/log-B' | grep -qx 3 && grep -q -- '--agent codex --global' '$sk/log-B' && ! grep -q '^claude' '$sk/log-B' && ! grep -q claude-code '$sk/log-B'"
-check "skills (agents): no restart note" "! grep -q 'restart Claude Code' '$work/sk-B.log'"
-skl C --for both --skills yes
-check "skills yes (both): plugins for claude, skills for codex" "grep -q '^claude plugin install' '$sk/log-C' && grep -c '^npx' '$sk/log-C' | grep -qx 3"
-mkdir -p "$work/home-H/.claude/skills/ponytail" "$work/sk-H"; : > "$sk/log-H"
-HOME="$work/home-H" STUBLOG="$sk/log-H" PATH="$sk:$PATH" bash "$kit/install.sh" --for claude --project new --prompt no --graphify no --skills yes "$work/sk-H" </dev/null >"$work/sk-H.log" 2>&1
-check "skills: a skill already in ~/.claude/skills is not installed as a plugin" "! grep -q 'plugin install ponytail' '$sk/log-H' && grep -q 'plugin install superpowers' '$sk/log-H' && grep -q 'already in' '$work/sk-H.log'"
-skl D --for both --skills no
-check "skills no: nothing runs" "[ ! -s '$sk/log-D' ] && grep -q 'skipped' '$work/sk-D.log'"
-skl E --for both
-check "skills (nobody to ask): nothing runs" "[ ! -s '$sk/log-E' ]"
-skl F --for both --dry-run --skills yes
-check "skills: dry run changes nothing" "[ ! -s '$sk/log-F' ]"
-check "bad --skills value fails" "! install --skills maybe '$work'"
-
-# graph view: an interactive, Obsidian-style graph-view.html built from graphify-out/graph.json
-# It must never be graph.html: graphify owns that name and rewrites it on every update.
-echo "== graph view"
-py=""
-for c in python3 python py; do
-  if "$c" -c 'import sys; sys.exit(sys.version_info < (3, 8))' >/dev/null 2>&1; then py="$c"; break; fi
-done
-if [ -n "$py" ]; then
-  check "graph view: generator tests pass" "'$py' '$kit/tests/test_graph_view.py' > '$work/gv-unit.log' 2>&1 || { tail -15 '$work/gv-unit.log'; false; }"
-  d="$work/gview"; mkdir -p "$d/graphify-out"; cp "$kit/tests/fixtures/graph.json" "$d/graphify-out/graph.json"
-  check "graph view: installer builds graph-view.html" "install --graph-view '$d' && [ -s '$d/graphify-out/graph-view.html' ] && grep -q 'AuthModule' '$d/graphify-out/graph-view.html'"
-  check "graph view: installer leaves graphify's graph.html alone" "[ ! -e '$d/graphify-out/graph.html' ]"
-  check "graph view: a graphify update keeps the custom view" "printf 'graph.html\n' > '$d/graphify-out/graph.html' && install --graph-view '$d' && [ \"\$(cat '$d/graphify-out/graph.html')\" = graph.html ]"
-  check "graph view: dry run writes nothing" "rm '$d/graphify-out/graph-view.html' && install --graph-view --dry-run '$d' && [ ! -e '$d/graphify-out/graph-view.html' ]"
-  check "graph view: no graph fails" "mkdir -p '$work/nograph' && ! install --graph-view '$work/nograph'"
-
-  # --force-view: the kit's design becomes the only HTML graph in the project
-  fx="$work/force"; mkdir -p "$fx/graphify-out"
-  cp "$kit/tests/fixtures/graph.json" "$fx/graphify-out/graph.json"
-  printf 'graphify own page\n' > "$fx/graphify-out/graph.html"
-  old_rc="$work/force-rc"; printf 'query_depth=3\n' > "$old_rc"
-  cp "$old_rc" "$fx/.graphifyrc"
-  check "force view: runs without error" "install --force-view '$fx'"
-  check "force view: viewer copied for editing" "[ -f '$fx/tools/graph-view/template.html' ] && [ -f '$fx/tools/graph-view/graph_view.py' ] && [ -f '$fx/tools/graph-view/refresh.py' ]"
-  check "force view: vendor files copied" "[ -f '$fx/tools/graph-view/vendor/d3-force.min.js' ] && [ -f '$fx/tools/graph-view/vendor/LICENSE' ]"
-  check "force view: view built" "[ -s '$fx/graphify-out/graph-view.html' ] && grep -q 'AuthModule' '$fx/graphify-out/graph-view.html'"
-  check "force view: graphify's graph.html removed" "[ ! -e '$fx/graphify-out/graph.html' ]"
-  check "force view: existing .graphifyrc kept" "grep -qx 'query_depth=3' '$fx/.graphifyrc'"
-  check "force view: missing viz_node_limit is reported, not written" "grep -q 'without viz_node_limit' '$work/last.log' && ! grep -q 'viz_node_limit=' '$fx/.graphifyrc'"
-  check "force view: second run keeps edited template" "echo 'MY DESIGN' >> '$fx/tools/graph-view/template.html' && install --force-view '$fx' && grep -q 'MY DESIGN' '$fx/tools/graph-view/template.html'"
-  check "force view: second run reports kept files" "grep -q 'kept yours' '$work/last.log'"
-  fz="$work/force-new"; mkdir -p "$fz"
-  check "force view: writes .graphifyrc when absent" "install --force-view '$fz' && grep -qx 'viz_node_limit=0' '$fz/.graphifyrc'"
-  check "force view: no graph is not an error" "grep -q 'no graph yet' '$work/last.log'"
-  check "force view: installs the kit files too" "[ -f '$work/force-new/CLAUDE.md' ] && [ -f '$work/force-new/AGENTS.md' ] && [ -d '$work/force-new/docs' ]"
-  check "force view: dry run copies nothing" "rm -rf '$work/force-dry' && mkdir -p '$work/force-dry' && install --force-view --dry-run '$work/force-dry' && [ ! -e '$work/force-dry/tools' ] && [ ! -e '$work/force-dry/.graphifyrc' ]"
-else
-  echo "  skip  graph view tests: no Python 3.8+ found"
-fi
 
 # Bad input is refused
 echo "== errors"

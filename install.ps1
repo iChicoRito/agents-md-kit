@@ -13,10 +13,10 @@
 # so the Unicode symbols are built from code points.
 #   -Update                    project already has the kit: add missing files, and save the
 #                              newer kit version of changed files as <file>.kit-new
-param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$DryRun, [switch]$AddCommand, [string]$ProfilePath = $PROFILE, [switch]$Check, [switch]$GraphView, [switch]$ForceView, [string]$Graphify = "", [string]$Skills = "", [switch]$Help)
+param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$DryRun, [switch]$AddCommand, [string]$ProfilePath = $PROFILE, [switch]$Check, [string]$Skills = "", [switch]$Help)
 $ErrorActionPreference = 'Stop'
 
-$kitVersion = "1.7.1"   # keep equal to the VERSION file (the tests check this)
+$kitVersion = "2.0.0"   # keep equal to the VERSION file (the tests check this)
 $repo = "https://github.com/iChicoRito/agents-md-kit"
 $archive = "$repo/archive/refs/heads/main.zip"
 
@@ -105,16 +105,6 @@ if ($Help) {
     Write-Host "    -Check               list the [PLACEHOLDERS] still left in CLAUDE.md, AGENTS.md"
     Write-Host "                         and docs/, then stop"
     Write-Host ""
-    Write-Host "    -GraphView           build the graph view (graphify-out/graph-view.html, an interactive map of"
-    Write-Host "                         your code, like Obsidian's graph) from graphify-out/graph.json, then stop"
-    Write-Host ""
-    Write-Host "    -ForceView           make this view the only HTML graph: copy the viewer into"
-    Write-Host "                         tools/graph-view/ so the design is yours to edit, set"
-    Write-Host "                         viz_node_limit=0 in .graphifyrc, and remove graphify's graph.html"
-    Write-Host ""
-    Write-Host "    -Graphify yes|no     graphify, the code knowledge graph: yes = install it if missing"
-    Write-Host "                         and build the graph without asking, no = skip it (default: ask)"
-    Write-Host ""
     Write-Host "    -Skills yes|no       primary skills (Superpowers, Ponytail, Caveman, official repos):"
     Write-Host "                         yes = install them, or update those already installed, without"
     Write-Host "                         asking; no = skip (default: ask)"
@@ -147,7 +137,6 @@ if ($AddCommand) {
 if ($For -and $For -notin @("claude", "agents", "both")) { Write-Fail "Unknown -For value: $For (use claude, agents or both)"; return }
 if ($Project -and $Project -notin @("new", "existing")) { Write-Fail "Unknown -Project value: $Project (use new or existing)"; return }
 if ($Prompt -and $Prompt -notin @("yes", "no")) { Write-Fail "Unknown -Prompt value: $Prompt (use yes or no)"; return }
-if ($Graphify -and $Graphify -notin @("yes", "no")) { Write-Fail "Unknown -Graphify value: $Graphify (use yes or no)"; return }
 if ($Skills -and $Skills -notin @("yes", "no")) { Write-Fail "Unknown -Skills value: $Skills (use yes or no)"; return }
 # A pinned version downloads that release; "1.0.0" and "v1.0.0" both work.
 $Version = $Version -replace '^v', ''
@@ -196,53 +185,6 @@ function Get-KitRoot {
     if (-not $root -or -not (Test-Path (Join-Path $root.FullName "template"))) { Write-Fail "Download incomplete: template not found"; return $false }
     $script:kitRoot = $root.FullName; $script:kitSrc = "downloaded"
     return $true
-}
-
-# Returns a Python 3.8+ command, or $null. Graphify needs Python, so it is nearly always there.
-function Find-Python {
-    $ErrorActionPreference = "Continue"
-    $cands = @()
-    $gp = Join-Path $Target "graphify-out\.graphify_python"
-    if (Test-Path $gp) { $cands += (Get-Content -LiteralPath $gp -Raw).Trim() }
-    $cands += if ($env:OS -eq "Windows_NT") { "python", "py", "python3" } else { "python3", "python" }
-    foreach ($c in $cands) {
-        if (-not $c) { continue }
-        if (-not (Get-Command $c -ErrorAction SilentlyContinue) -and -not (Test-Path -LiteralPath $c)) { continue }
-        try { & $c -c "import sys; sys.exit(sys.version_info < (3, 8))" 2>$null | Out-Null } catch { continue }
-        if ($LASTEXITCODE -eq 0) { return $c }
-    }
-    return $null
-}
-
-# Writes graphify-out/graph-view.html (Obsidian-style) from graphify-out/graph.json. Returns "<n> nodes", or $null on failure.
-# graph-view.html, never graph.html: graphify owns graph.html and rewrites it on every update, which would
-# throw this view away. A separate name keeps the custom view across graphify update, hooks and rebuilds.
-function New-GraphView {
-    $ErrorActionPreference = "Continue"
-    $py = Find-Python
-    if (-not $py) { return $null }
-    if (-not (Get-KitRoot)) { return $null }
-    $gen = Join-Path $script:kitRoot "tools\graph-view\graph_view.py"
-    $out = & $py $gen (Join-Path $Target "graphify-out\graph.json") -o (Join-Path $Target "graphify-out\graph-view.html") 2>&1 | Out-String
-    if ($LASTEXITCODE -ne 0) { return $null }
-    if ($out -match '\((\d+) nodes') { return "$($Matches[1]) nodes" }
-    return ""
-}
-
-# ---------- -GraphView: build the graph view, then stop ----------
-if ($GraphView) {
-    try {
-        Write-Host ""
-        if (-not (Test-Path (Join-Path $Target "graphify-out\graph.json"))) { Write-Fail "No graph found in $Target\graphify-out. Build one first: graphify update ."; return }
-        if (-not (Find-Python)) { Write-Fail "Python 3.8 or newer is needed to build the graph view."; return }
-        if ($DryRun) { Write-Done "Graph view" "would be built" "graphify-out/graph-view.html"; Write-Host ""; return }
-        $nodes = New-GraphView
-        if ($null -eq $nodes) { Write-Fail "Could not build the graph view."; return }
-        Write-Done "Graph view" "built" "$(if ($nodes) { "$nodes $SEP " })graphify-out/graph-view.html"
-        Write-Part "    $ELB open graphify-out/graph-view.html in your browser. graphify keeps graph.html; this view is not touched by updates." Dim -End
-        Write-Host ""
-    } finally { if ($script:tmp) { Remove-Item -Recurse -Force $script:tmp -ErrorAction SilentlyContinue } }
-    return
 }
 
 # ---------- -Check: list placeholders still left in the kit files, then stop ----------
@@ -422,7 +364,6 @@ if ($Update) {
 }
 Write-Done "PROMPT.md" $Prompt $promptNote
 
-# ---------- graphify (optional): asks first, never installs or builds without a yes ----------
 # Runs a command in the project folder with a spinner. Returns Ok and the last output.
 # While $script:barTotal is set (steps in the current group, $script:barDone finished) it also shows the
 # progress bar. The running step creeps toward its end but never reaches it: we cannot know how long it takes.
@@ -456,72 +397,6 @@ function Read-YesNo([string]$Question, [string]$YesHint, [string]$NoHint) {
     if ($menus) { return ((Select-Option $Question 2 @("Yes|$YesHint", "No|$NoHint")) -eq 1) }
     Write-Host ""; Write-Part "  $YesHint" Dim -End
     return ((Read-Answer "$Question [y/N]" "n" @("y", "n", "yes", "no")) -in "y", "yes")
-}
-
-function Test-Graphify { [bool](Get-Command graphify -ErrorAction SilentlyContinue) }
-
-# Returns "handled" (done or declined), "skipped" (not possible) or "" (nobody was asked).
-function Invoke-GraphifyStep {
-    if (Test-Path (Join-Path $Target "graphify-out\graph.json")) {
-        Write-Done "Graphify" "graph found" "the AI will query graphify-out/ first"; return "handled"
-    }
-    if (-not $Graphify -and -not $canAsk) { return "" }   # nobody to ask: the next steps mention it
-    if ($Graphify -eq "no") { Write-Done "Graphify" "skipped" "build a graph later: graphify update ."; return "handled" }
-    if (-not (Test-Graphify)) {
-        $inst = $null
-        if (Get-Command uv -ErrorAction SilentlyContinue) { $inst = @("uv", "tool", "install", "graphifyy") }
-        elseif (Get-Command pipx -ErrorAction SilentlyContinue) { $inst = @("pipx", "install", "graphifyy") }
-        else {
-            foreach ($py in "python", "python3", "py") {
-                if (Get-Command $py -ErrorAction SilentlyContinue) { $inst = @($py, "-m", "pip", "install", "--user", "graphifyy"); break }
-            }
-        }
-        if (-not $inst) { Write-Done "Graphify" "not installed" "needs uv, pipx or Python. See docs/guides/setup.md"; return "skipped" }
-        $yes = ($Graphify -eq "yes")
-        if (-not $Graphify) {
-            $yes = Read-YesNo "graphify is not installed. Install the official graphify?" "runs: $($inst -join ' ')" "you can install it later: see docs/guides/setup.md"
-        }
-        if (-not $yes) { Write-Done "Graphify" "not installed" "skipped, see docs/guides/setup.md"; return "handled" }
-        $script:barDone = 0; $script:barTotal = 2   # install, then build (build may still be declined)
-        $r = Invoke-Spinner "Installing graphify" $inst[0] $inst[1..($inst.Count - 1)] $Target
-        if (-not $r.Ok) {
-            $script:barTotal = 0
-            Write-Done "Graphify" "install failed" "see docs/guides/setup.md"
-            $r.Out -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 3 | ForEach-Object { Write-Part "        $_" Dim -End }
-            return "skipped"
-        }
-        # a new tool may sit in a folder this terminal does not know yet
-        if (-not (Test-Graphify)) {
-            $dirs = @("$HOME\.local\bin")
-            if (Get-Command uv -ErrorAction SilentlyContinue) { $dirs += @(& uv tool dir --bin 2>$null) }
-            if ($inst[0] -in "python", "python3", "py") { $dirs += @(& $inst[0] -c "import sysconfig; print(sysconfig.get_path('scripts', 'nt_user'))" 2>$null) }
-            foreach ($d in $dirs) {
-                if ($d -and ((Test-Path "$d\graphify.exe") -or (Test-Path "$d\graphify.cmd"))) { $env:PATH = "$d;$env:PATH"; break }
-            }
-        }
-        if (-not (Test-Graphify)) { Write-Done "Graphify" "installed" "open a new terminal, then run: graphify update ."; return "handled" }
-        Write-Done "Graphify" "installed" "official package: graphifyy"
-    } else { Write-Done "Graphify" "found" "already installed" }
-    $build = ($Graphify -eq "yes")
-    if (-not $Graphify) {
-        $build = Read-YesNo "Build the code graph for this project now?" "runs: graphify update .  (reads your code only: no AI, no tokens)" "build it later: graphify update ."
-    }
-    if (-not $build) { Write-Done "Graph" "not built" "build it later: graphify update ."; return "handled" }
-    if ($script:barTotal -ne 2) { $script:barDone = 0; $script:barTotal = 1 }   # graphify was already there: one step
-    $r = Invoke-Spinner "Building the code graph" "graphify" @("update", ".") $Target
-    $script:barTotal = 0
-    if ($r.Ok) {
-        $nodes = if ($r.Out -match 'Rebuilt: ([^\r\n\[]+)') { $Matches[1].Trim() } else { "" }
-        Write-Done "Graph" "built" "$(if ($nodes) { "$nodes $SEP " })graphify-out/"
-        $view = New-GraphView
-        if ($null -ne $view) { Write-Done "Graph view" "built" "$(if ($view) { "$view $SEP " })open graphify-out/graph-view.html" }
-        else { Write-Part "    $ELB graph view skipped (needs Python 3.8+). Try later: -GraphView" Dim -End }
-        Write-Part "    $ELB commit graphify-out/ to share it, or add it to .gitignore to keep it local" Dim -End
-    } else {
-        Write-Done "Graph" "build failed" "run graphify update . yourself to see why"
-        $r.Out -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 3 | ForEach-Object { Write-Part "        $_" Dim -End }
-    }
-    return "handled"
 }
 
 # ---------- primary skills (optional): Superpowers, Ponytail, Caveman from their official repos ----------
@@ -661,67 +536,8 @@ try {
         Write-Host ""
     }
     if ($skipped.Count) { Write-Part "      Files marked ! were kept as they are. Merge the kit's version by hand if you want it." Dim -End }
-    $gfyState = ""
-    if (-not $DryRun) { $gfyState = "$(Invoke-GraphifyStep)" }
     $skillsState = ""
     if (-not $DryRun) { $skillsState = "$(Invoke-SkillsStep)" }
-
-    # ---------- -ForceView: make the kit's view the only HTML graph in the project ----------
-    # Runs after the files are copied, so a project gets the full kit and the viewer together.
-    # Copies the viewer into tools/graph-view/ so the design can be edited, writes .graphifyrc so
-    # graphify's hooks render no graph.html, removes graphify's page, and builds the view.
-    # Never overwrites: an existing file or .graphifyrc setting is kept and reported.
-    function Invoke-ForceViewStep {
-        if (-not (Find-Python)) { Write-Part "    ! graph view skipped: Python 3.8+ not found" Yellow -End; return }
-        if (-not (Get-KitRoot)) { Write-Part "    ! graph view skipped: kit files not available" Yellow -End; return }
-        $dest = Join-Path $Target "tools\graph-view"
-        $src = Join-Path $script:kitRoot "tools\graph-view"
-        $files = @("graph_view.py", "refresh.py", "template.html", "vendor\LICENSE",
-                   "vendor\d3-dispatch.min.js", "vendor\d3-quadtree.min.js",
-                   "vendor\d3-timer.min.js", "vendor\d3-force.min.js")
-        $made = 0; $kept = @()
-        New-Item -ItemType Directory -Force (Join-Path $dest "vendor") | Out-Null
-        foreach ($f in $files) {
-            $to = Join-Path $dest $f
-            if (Test-Path $to) { $kept += $f; continue }
-            Copy-Item (Join-Path $src $f) $to -Force
-            $made++
-        }
-        Write-Done "Force view" "copied" "$(Format-Files $made) to tools/graph-view/"
-        if ($kept.Count -gt 0) { Write-Part "    $ELB kept yours: $($kept -join ', ')" Dim -End }
-        $rc = Join-Path $Target ".graphifyrc"
-        if (Test-Path $rc) {
-            $rcText = Get-Content $rc -Raw
-            if ($rcText -match '(?m)^\s*viz_node_limit\s*=') {
-                Write-Part "    $ELB .graphifyrc already sets viz_node_limit; left as it is" Dim -End
-            } else {
-                Write-Part "    ! .graphifyrc exists without viz_node_limit. Add this line to stop graphify's own page:" Yellow -End
-                Write-Part "      viz_node_limit=0" Bold -End
-            }
-        } else {
-            Set-Content -Path $rc -Value "viz_node_limit=0" -NoNewline
-            Write-Part "    $ELB .graphifyrc viz_node_limit=0 (graphify renders no graph.html)" Dim -End
-        }
-        $staleHtml = Join-Path $Target "graphify-out\graph.html"
-        if (Test-Path $staleHtml) {
-            Remove-Item $staleHtml -Force
-            Write-Part "    $ELB removed graphify-out/graph.html: one HTML view, always this design" Dim -End
-        }
-        if (Test-Path (Join-Path $Target "graphify-out\graph.json")) {
-            $nodes = New-GraphView
-            if ($null -ne $nodes) {
-                Write-Done "Graph view" "built" "$(if ($nodes) { "$nodes $SEP " })graphify-out/graph-view.html"
-            } else {
-                Write-Part "    $ELB view not built yet: run python tools/graph-view/refresh.py" Dim -End
-            }
-        } else {
-            Write-Part "    $ELB no graph yet. This project has code but no graphify graph. Build it:" Dim -End
-            Write-Part "      python tools/graph-view/refresh.py" Bold -End
-            Write-Part "    $ELB that reads your code, needs no AI and costs no tokens, then writes graph-view.html" Dim -End
-        }
-        Write-Part "    $ELB the design lives in tools/graph-view/template.html. Rebuild: python tools/graph-view/refresh.py --no-graph" Dim -End
-    }
-    if ($ForceView -and -not $DryRun) { Invoke-ForceViewStep }
 
     # ---------- next steps ----------
     $main = if ($For -eq "agents") { "AGENTS.md" } else { "CLAUDE.md" }
@@ -745,7 +561,6 @@ try {
             Write-Part "    1" Accent; Write-Part "  Nothing to merge. Your kit files match the latest version." -End
         }
         Write-Part "    2" Accent; Write-Part "  New skills or plugins? Check "; Write-Part "docs/guides/setup.md" Bold -End
-        if (-not $gfyState) { Write-Part "    Optional: build a code graph the AI can query: graphify update .  (see docs/guides/setup.md)" Dim -End }
         Write-Host ""
         Write-Part "  $DOT " Green; Write-Part "Done." Bold; Write-Part " Guide: $repo/blob/main/GUIDE.md" Dim -End
         Write-Host ""
@@ -775,7 +590,6 @@ try {
     } else {
         Write-Part "    3" Accent; Write-Part "  In Claude Code, run "; Write-Part "/memory" Bold; Write-Part " and "; Write-Part "/skills" Bold; Write-Part " to check what loads" -End
     }
-    if (-not $gfyState) { Write-Part "    Optional: build a code graph the AI can query: graphify update .  (see docs/guides/setup.md)" Dim -End }
     Write-Part "    See which placeholders are left any time: add " Dim; Write-Part "-Check" Bold; Write-Part " to the install command" Dim -End
     Write-Host ""
     Write-Part "  $DOT " Green; Write-Part "Done." Bold; Write-Part " Guide: $repo/blob/main/GUIDE.md" Dim -End

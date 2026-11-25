@@ -15,7 +15,7 @@
 # Exception: an existing .gitignore is kept and only missing lines are added.
 set -euo pipefail
 
-kit_version="1.7.1"   # keep equal to the VERSION file (the tests check this)
+kit_version="2.0.0"   # keep equal to the VERSION file (the tests check this)
 repo="https://github.com/iChicoRito/agents-md-kit"
 archive="$repo/archive/refs/heads/main.tar.gz"
 
@@ -81,16 +81,6 @@ usage() {
     --check               list the [PLACEHOLDERS] still left in CLAUDE.md, AGENTS.md
                           and docs/, then stop (exit code 1 when some are left)
 
-    --graph-view          build the graph view (graphify-out/graph-view.html, an interactive map of your
-                          code, like Obsidian's graph) from graphify-out/graph.json, then stop
-
-    --force-view          make this view the only HTML graph: copy the viewer into
-                          tools/graph-view/ so the design is yours to edit, set
-                          viz_node_limit=0 in .graphifyrc, and remove graphify's graph.html
-
-    --graphify yes|no     graphify, the code knowledge graph: yes = install it if missing and
-                          build the graph without asking, no = skip it (default: ask)
-
     --skills yes|no       primary skills (Superpowers, Ponytail, Caveman, official repos):
                           yes = install them, or update those already installed, without
                           asking; no = skip (default: ask)
@@ -101,7 +91,7 @@ EOF
 }
 
 # ---------- arguments ----------
-choice=""; project=""; prompt=""; update=""; want_version=""; dry=""; add_cmd=""; check=""; gview=""; force_view=""; gfy_flag=""; skills_flag=""; gfy_log=""; target="$PWD"
+choice=""; project=""; prompt=""; update=""; want_version=""; dry=""; add_cmd=""; check=""; skills_flag=""; step_log=""; target="$PWD"
 need_value() { [ "$2" -ge 2 ] || fail "$1 needs a value (see --help)"; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -118,10 +108,6 @@ while [ $# -gt 0 ]; do
     --dry-run) dry=1; shift ;;
     --add-command) add_cmd=1; shift ;;
     --check) check=1; shift ;;
-    --graph-view) gview=1; shift ;;
-    --force-view) force_view=1; shift ;;
-    --graphify) need_value "$1" $#; gfy_flag="$2"; shift 2 ;;
-    --graphify=*) gfy_flag="${1#--graphify=}"; shift ;;
     --skills) need_value "$1" $#; skills_flag="$2"; shift 2 ;;
     --skills=*) skills_flag="${1#--skills=}"; shift ;;
     -*) fail "Unknown option: $1 (see --help)" ;;
@@ -196,7 +182,6 @@ fi
 case "$choice" in ""|claude|agents|both) ;; *) fail "Unknown --for value: $choice (use claude, agents or both)" ;; esac
 case "$project" in ""|new|existing) ;; *) fail "Unknown --project value: $project (use new or existing)" ;; esac
 case "$prompt" in ""|yes|no) ;; *) fail "Unknown --prompt value: $prompt (use yes or no)" ;; esac
-case "$gfy_flag" in ""|yes|no) ;; *) fail "Unknown --graphify value: $gfy_flag (use yes or no)" ;; esac
 case "$skills_flag" in ""|yes|no) ;; *) fail "Unknown --skills value: $skills_flag (use yes or no)" ;; esac
 # A pinned version downloads that release; "1.0.0" and "v1.0.0" both work.
 want_version="${want_version#v}"
@@ -235,7 +220,7 @@ cleanup() {
   [ -n "$ansi" ] && printf '\033[?25h'
   if [ -n "$menus" ]; then stty "$old_stty" 2>/dev/null <&3 || true; fi
   [ -n "${tmp:-}" ] && rm -rf "$tmp"
-  [ -n "$gfy_log" ] && rm -f "$gfy_log"
+  [ -n "$step_log" ] && rm -f "$step_log"
   return 0
 }
 trap cleanup EXIT
@@ -362,44 +347,6 @@ fetch_kit() {
   [ -d "$kit_root/template" ] || fail "Download incomplete: template/ not found"
   kit_src=downloaded
 }
-
-# find_python: prints a Python 3.8+ command, or returns 1. Graphify needs Python, so it is nearly always there.
-find_python() {
-  local c list=""
-  case "$(uname -s 2>/dev/null)" in MINGW*|MSYS*|CYGWIN*) list="python python3 py" ;; *) list="python3 python" ;; esac
-  if [ -f "$target/graphify-out/.graphify_python" ]; then list="$(tr -d '\r\n' < "$target/graphify-out/.graphify_python") $list"; fi
-  for c in $list; do
-    if "$c" -c 'import sys; sys.exit(sys.version_info < (3, 8))' >/dev/null 2>&1; then echo "$c"; return 0; fi
-  done
-  return 1
-}
-
-# make_view: writes graphify-out/graph-view.html (Obsidian-style) from graphify-out/graph.json. Prints "<nodes> nodes".
-# graph-view.html, never graph.html: graphify owns graph.html and rewrites it on every update, which would
-# throw this view away. A separate name keeps the custom view across graphify update, hooks and rebuilds.
-make_view() {
-  local py out
-  py="$(find_python)" || return 1
-  fetch_kit
-  out="$("$py" "$kit_root/tools/graph-view/graph_view.py" "$target/graphify-out/graph.json" -o "$target/graphify-out/graph-view.html" 2>&1)" || { printf '%s\n' "$out" >&2; return 1; }
-  printf '%s\n' "$out" | sed -n 's/.*(\([0-9]*\) nodes.*/\1 nodes/p'
-}
-
-# ---------- --graph-view: build the graph view, then stop ----------
-if [ -n "$gview" ]; then
-  say ""
-  [ -f "$target/graphify-out/graph.json" ] || fail "No graph found in $target/graphify-out. Build one first: graphify update ."
-  find_python >/dev/null || fail "Python 3.8 or newer is needed to build the graph view."
-  if [ -n "$dry" ]; then
-    done_line "Graph view" "would be built" "graphify-out/graph-view.html"; say ""; exit 0
-  fi
-  fetch_kit   # outside the $( ) below, so the download spinner shows and the result is kept
-  nodes="$(make_view 2>&1)" || fail "Could not build the graph view. ${nodes:-}"
-  done_line "Graph view" "built" "${nodes:+$nodes $SEP }graphify-out/graph-view.html"
-  say "    ${D}${ELB} open graphify-out/graph-view.html in your browser. graphify keeps graph.html; this view is not touched by updates.${N}"
-  say ""
-  exit 0
-fi
 
 # ---------- welcome ----------
 w=50
@@ -572,9 +519,6 @@ case "$choice" in claude) anchor="claude-code-only-claude" ;; agents) anchor="co
 prompt_url="$repo/blob/main/PROMPTS.md#$anchor"
 prompt_skipped=""; for s in "${skipped[@]+"${skipped[@]}"}"; do [ "$s" = "PROMPT.md" ] && prompt_skipped=1; done
 
-# ---------- graphify (optional): asks first, never installs or builds without a yes ----------
-gfy_state=""   # handled: done or declined | skipped: not possible | empty: nobody was asked
-
 # yesno "<question>" "<hint for yes>" "<hint for no>": sets $answer to yes or no (default no)
 yesno() {
   if [ -n "$menus" ]; then
@@ -587,90 +531,16 @@ yesno() {
   fi
 }
 
-# gfy_run "<text>" <command...>: runs it in the project folder with a spinner; output goes to $gfy_log
-gfy_run() {
+# run_step "<text>" <command...>: runs it in the project folder with a spinner; output goes to $step_log
+run_step() {
   local text="$1"; shift
-  rm -f "$gfy_log"; gfy_log="$(mktemp)"
-  ( cd "$target" && "$@" ) >"$gfy_log" 2>&1 & local pid=$!
+  rm -f "$step_log"; step_log="$(mktemp)"
+  ( cd "$target" && "$@" ) >"$step_log" 2>&1 & local pid=$!
   spin "$text" "$pid"
   local rc=0; wait "$pid" || rc=$?
   [ "$bar_total" -gt 0 ] && bar_done=$((bar_done + 1))
   return $rc
 }
-
-graphify_step() {
-  local ans inst=() b nodes
-  if [ -f "$target/graphify-out/graph.json" ]; then
-    done_line "Graphify" "graph found" "the AI will query graphify-out/ first"; gfy_state=handled; return 0
-  fi
-  [ -z "$gfy_flag" ] && [ -z "$can_ask" ] && return 0   # nobody to ask: the next steps mention it
-  if [ "$gfy_flag" = no ]; then
-    done_line "Graphify" "skipped" "build a graph later: graphify update ."; gfy_state=handled; return 0
-  fi
-  if ! command -v graphify >/dev/null 2>&1; then
-    if command -v uv >/dev/null 2>&1; then inst=(uv tool install graphifyy)
-    elif command -v pipx >/dev/null 2>&1; then inst=(pipx install graphifyy)
-    elif command -v python3 >/dev/null 2>&1; then inst=(python3 -m pip install --user graphifyy)
-    elif command -v python >/dev/null 2>&1; then inst=(python -m pip install --user graphifyy); fi
-    if [ ${#inst[@]} -eq 0 ]; then
-      done_line "Graphify" "not installed" "needs uv, pipx or Python. See docs/guides/setup.md"; gfy_state=skipped; return 0
-    fi
-    ans="$gfy_flag"
-    if [ -z "$ans" ]; then
-      yesno "graphify is not installed. Install the official graphify?" \
-        "runs: ${inst[*]}" "you can install it later: see docs/guides/setup.md"
-      ans="$answer"
-    fi
-    if [ "$ans" != yes ]; then
-      done_line "Graphify" "not installed" "skipped, see docs/guides/setup.md"; gfy_state=handled; return 0
-    fi
-    bar_done=0; bar_total=2   # install, then build (build may still be declined)
-    if ! gfy_run "Installing graphify" "${inst[@]}"; then
-      bar_total=0
-      done_line "Graphify" "install failed" "see docs/guides/setup.md"
-      tail -3 "$gfy_log" | sed "s/^/        ${D}/; s/\$/${N}/"; gfy_state=skipped; return 0
-    fi
-    # a new tool may sit in a folder this terminal does not know yet
-    if ! command -v graphify >/dev/null 2>&1; then
-      for b in "$(uv tool dir --bin 2>/dev/null || true)" "$HOME/.local/bin"; do
-        if [ -n "$b" ] && { [ -x "$b/graphify" ] || [ -x "$b/graphify.exe" ]; }; then PATH="$b:$PATH"; break; fi
-      done
-    fi
-    if ! command -v graphify >/dev/null 2>&1; then
-      done_line "Graphify" "installed" "open a new terminal, then run: graphify update ."; gfy_state=handled; return 0
-    fi
-    done_line "Graphify" "installed" "official package: graphifyy"
-  else
-    done_line "Graphify" "found" "already installed"
-  fi
-  ans="$gfy_flag"
-  if [ -z "$ans" ]; then
-    yesno "Build the code graph for this project now?" \
-      "runs: graphify update .  (reads your code only: no AI, no tokens)" "build it later: graphify update ."
-    ans="$answer"
-  fi
-  gfy_state=handled
-  if [ "$ans" != yes ]; then
-    done_line "Graph" "not built" "build it later: graphify update ."; return 0
-  fi
-  [ "$bar_total" -eq 2 ] || { bar_done=0; bar_total=1; }   # graphify was already there: one step
-  if gfy_run "Building the code graph" graphify update .; then
-    bar_total=0
-    nodes="$(grep -o 'Rebuilt: [^[]*' "$gfy_log" | tail -1 | sed 's/^Rebuilt: //' || true)"
-    done_line "Graph" "built" "${nodes:+$nodes $SEP }graphify-out/"
-    if nodes="$(make_view 2>/dev/null)"; then
-      done_line "Graph view" "built" "${nodes:+$nodes $SEP }open graphify-out/graph-view.html"
-    else
-      say "    ${D}${ELB} graph view skipped (needs Python 3.8+). Try later: --graph-view${N}"
-    fi
-    say "    ${D}${ELB} commit graphify-out/ to share it, or add it to .gitignore to keep it local${N}"
-  else
-    bar_total=0
-    done_line "Graph" "build failed" "run graphify update . yourself to see why"
-    tail -3 "$gfy_log" | sed "s/^/        ${D}/; s/\$/${N}/"
-  fi
-}
-if [ -z "$dry" ]; then graphify_step; fi
 
 # ---------- primary skills (optional): Superpowers, Ponytail, Caveman from their official repos ----------
 # Asks first (default No). Claude Code gets the plugins (they bring the automatic modes): installed with
@@ -709,13 +579,13 @@ skills_step() {
       name="${item%%|*}"; rest="${item#*|}"; id="${rest%%|*}"; rest="${rest#*|}"; repo="${rest%%|*}"; marker="${rest#*|}"
       if printf '%s\n' "$installed" | grep -qE "[[:space:]]${id}\$"; then
         claude plugin marketplace update "${id#*@}" >/dev/null 2>&1 || true
-        if gfy_run "Updating $name" claude plugin update "$id" -y; then done_line "$name" "up to date" "Claude Code plugin"; ok=$((ok + 1)); ok_claude=$((ok_claude + 1))
+        if run_step "Updating $name" claude plugin update "$id" -y; then done_line "$name" "up to date" "Claude Code plugin"; ok=$((ok + 1)); ok_claude=$((ok_claude + 1))
         else done_line "$name" "update failed" "run: claude plugin update $id"; bad=$((bad + 1)); fi
       elif [ -e "$HOME/.claude/skills/$marker" ]; then
         bar_done=$((bar_done + 1))
         done_line "$name" "skipped" "already in ~/.claude/skills (installed as skills, not a plugin)"
       else
-        if gfy_run "Installing $name" claude plugin install "$name" --marketplace "$repo" -y; then done_line "$name" "installed" "Claude Code plugin from $repo"; ok=$((ok + 1)); ok_claude=$((ok_claude + 1))
+        if run_step "Installing $name" claude plugin install "$name" --marketplace "$repo" -y; then done_line "$name" "installed" "Claude Code plugin from $repo"; ok=$((ok + 1)); ok_claude=$((ok_claude + 1))
         else done_line "$name" "install failed" "run: claude plugin install $name --marketplace $repo"; bad=$((bad + 1)); fi
       fi
     done
@@ -723,7 +593,7 @@ skills_step() {
   if [ -n "$have_npx" ]; then
     for item in "${skill_list[@]}"; do
       name="${item%%|*}"; rest="${item#*|}"; rest="${rest#*|}"; repo="${rest%%|*}"
-      if gfy_run "Installing $name for Codex" npx --yes skills add "$repo" --skill '*' --agent codex --global -y; then
+      if run_step "Installing $name for Codex" npx --yes skills add "$repo" --skill '*' --agent codex --global -y; then
         done_line "$name" "installed or updated" "Codex skills $SEP $repo"; ok=$((ok + 1))
       else
         done_line "$name" "failed" "run: npx skills add $repo --agent codex"; bad=$((bad + 1))
@@ -731,58 +601,11 @@ skills_step() {
     done
   fi
   bar_total=0
-  [ "$bad" -gt 0 ] && tail -3 "$gfy_log" | sed "s/^/        ${D}/; s/\$/${N}/"
+  [ "$bad" -gt 0 ] && tail -3 "$step_log" | sed "s/^/        ${D}/; s/\$/${N}/"
   [ "$ok_claude" -gt 0 ] && say "    ${D}${ELB} restart Claude Code to load new or updated plugins${N}"
   return 0
 }
 if [ -z "$dry" ]; then skills_step; fi
-
-# ---------- --force-view: make the kit's view the only HTML graph in the project ----------
-# Runs after the files are copied, so a project gets the full kit and the viewer together.
-# Copies the viewer into tools/graph-view/ so the design can be edited, writes .graphifyrc so
-# graphify's hooks render no graph.html, removes graphify's page, and builds the view.
-# Never overwrites: an existing file or .graphifyrc setting is kept and reported.
-force_view_step() {
-  local dest="$target/tools/graph-view" made=() kept=() rel rc_target nodes
-  fetch_kit
-  find_python >/dev/null || { say "    ${Y}!${N} graph view skipped: Python 3.8+ not found"; return 0; }
-  mkdir -p "$dest/vendor"
-  for rel in graph_view.py refresh.py template.html vendor/LICENSE \
-             vendor/d3-dispatch.min.js vendor/d3-quadtree.min.js vendor/d3-timer.min.js vendor/d3-force.min.js; do
-    if [ -e "$dest/$rel" ]; then kept+=("$rel"); continue; fi
-    cp "$kit_root/tools/graph-view/$rel" "$dest/$rel"
-    made+=("$rel")
-  done
-  done_line "Force view" "copied" "$(files ${#made[@]}) to tools/graph-view/"
-  [ ${#kept[@]} -gt 0 ] && say "    ${D}${ELB} kept yours: ${kept[*]}${N}"
-  rc_target="$target/.graphifyrc"
-  if [ -e "$rc_target" ]; then
-    if grep -qE '^[[:space:]]*viz_node_limit[[:space:]]*=' "$rc_target"; then
-      say "    ${D}${ELB} .graphifyrc already sets viz_node_limit; left as it is${N}"
-    else
-      say "    ${Y}!${N} .graphifyrc exists without viz_node_limit. Add this line to stop graphify's own page:"
-      say "      ${B}viz_node_limit=0${N}"
-    fi
-  else
-    printf 'viz_node_limit=0\n' > "$rc_target"
-    say "    ${D}${ELB} .graphifyrc ${D}viz_node_limit=0${N} ${D}(graphify renders no graph.html)${N}"
-  fi
-  if [ -e "$target/graphify-out/graph.html" ]; then
-    rm -f "$target/graphify-out/graph.html"
-    say "    ${D}${ELB} removed graphify-out/graph.html: one HTML view, always this design${N}"
-  fi
-  if [ -f "$target/graphify-out/graph.json" ]; then
-    nodes="$(make_view 2>&1)" && done_line "Graph view" "built" "${nodes:+$nodes $SEP }graphify-out/graph-view.html" \
-      || say "    ${D}${ELB} view not built yet: run python tools/graph-view/refresh.py"
-  else
-    say "    ${D}${ELB} no graph yet. This project has code but no graphify graph. Build it:${N}"
-    say "      ${B}python tools/graph-view/refresh.py${N}"
-    say "    ${D}${ELB} that reads your code, needs no AI and costs no tokens, then writes graph-view.html${N}"
-  fi
-  say "    ${D}${ELB} the design lives in tools/graph-view/template.html. Rebuild: python tools/graph-view/refresh.py --no-graph${N}"
-  say ""
-}
-if [ -n "$force_view" ] && [ -z "$dry" ]; then force_view_step; fi
 
 # ---------- next steps ----------
 say ""
@@ -802,7 +625,6 @@ if [ -n "$update" ]; then
     say "    ${A}1${N}  Nothing to merge. Your kit files match the latest version."
   fi
   say "    ${A}2${N}  New skills or plugins? Check ${B}docs/guides/setup.md${N}"
-  [ -z "$gfy_state" ] && say "    ${D}Optional: build a code graph the AI can query: graphify update .  (see docs/guides/setup.md)${N}"
   say ""
   say "  ${G}${DOT}${N} ${B}Done.${N} ${D}Guide: $repo/blob/main/GUIDE.md${N}"
   say ""
@@ -830,7 +652,6 @@ if [ "$choice" = agents ]; then
 else
   say "    ${A}3${N}  In Claude Code, run ${B}/memory${N} and ${B}/skills${N} to check what loads"
 fi
-[ -z "$gfy_state" ] && say "    ${D}Optional: build a code graph the AI can query: graphify update .  (see docs/guides/setup.md)${N}"
 say "    ${D}See which placeholders are left any time: add${N} ${B}--check${N} ${D}to the install command${N}"
 say ""
 say "  ${G}${DOT}${N} ${B}Done.${N} ${D}Guide: $repo/blob/main/GUIDE.md${N}"
