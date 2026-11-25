@@ -413,8 +413,8 @@ function Invoke-GraphifyStep {
     if (Test-Path (Join-Path $Target "graphify-out\graph.json")) {
         Write-Done "Graphify" "graph found" "the AI will query graphify-out/ first"; return "handled"
     }
-    if (-not $Graphify -and -not $canAsk) { return "" }   # nobody to ask: the next steps mention it
-    if ($Graphify -eq "no") { Write-Done "Graphify" "skipped" "build a graph later: graphify update ."; return "handled" }
+    if (-not $Graphify) { return "" }   # nobody was asked: the next steps mention it
+    if ($Graphify -eq "no") { Write-Done "Graphify" "skipped" "install or build later: see docs/guides/setup.md"; return "handled" }
     if (-not (Test-Graphify)) {
         $inst = $null
         if (Get-Command uv -ErrorAction SilentlyContinue) { $inst = @("uv", "tool", "install", "graphifyy") }
@@ -425,12 +425,7 @@ function Invoke-GraphifyStep {
             }
         }
         if (-not $inst) { Write-Done "Graphify" "not installed" "needs uv, pipx or Python. See docs/guides/setup.md"; return "skipped" }
-        $yes = ($Graphify -eq "yes")
-        if (-not $Graphify) {
-            $yes = Read-YesNo "graphify is not installed. Install the official graphify?" "runs: $($inst -join ' ')" "you can install it later: see docs/guides/setup.md"
-        }
-        if (-not $yes) { Write-Done "Graphify" "not installed" "skipped, see docs/guides/setup.md"; return "handled" }
-        $script:barDone = 0; $script:barTotal = 2   # install, then build (build may still be declined)
+        $script:barDone = 0; $script:barTotal = 2   # install, then build
         $r = Invoke-Spinner "Installing graphify" $inst[0] $inst[1..($inst.Count - 1)] $Target
         if (-not $r.Ok) {
             $script:barTotal = 0
@@ -450,11 +445,6 @@ function Invoke-GraphifyStep {
         if (-not (Test-Graphify)) { Write-Done "Graphify" "installed" "open a new terminal, then run: graphify update ."; return "handled" }
         Write-Done "Graphify" "installed" "official package: graphifyy"
     } else { Write-Done "Graphify" "found" "already installed" }
-    $build = ($Graphify -eq "yes")
-    if (-not $Graphify) {
-        $build = Read-YesNo "Build the code graph for this project now?" "runs: graphify update .  (reads your code only: no AI, no tokens)" "build it later: graphify update ."
-    }
-    if (-not $build) { Write-Done "Graph" "not built" "build it later: graphify update ."; return "handled" }
     if ($script:barTotal -ne 2) { $script:barDone = 0; $script:barTotal = 1 }   # graphify was already there: one step
     $r = Invoke-Spinner "Building the code graph" "graphify" @("update", ".") $Target
     $script:barTotal = 0
@@ -536,6 +526,11 @@ try {
     elseif ($Version) { Write-Done "Template" "downloaded" "release v$Version" }
     else { Write-Done "Template" "downloaded" "latest from GitHub" }
 
+    # Ask before copying so PROMPT.md reflects the answer.
+    if (-not $DryRun -and -not $Graphify -and $canAsk -and -not (Test-Path (Join-Path $Target "graphify-out\graph.json"))) {
+        $Graphify = if (Read-YesNo "Set up graphify for this project?" "installs graphify if needed and builds the code graph" "install it later: see docs/guides/setup.md") { "yes" } else { "no" }
+    }
+
     # ---------- copy ----------
     $copied = 0; $same = 0; $added = @(); $skipped = @(); $newer = @(); $gitignoreAdded = $null
     $todo = @(Get-ChildItem -Path $Template -Recurse -Force -File | Sort-Object FullName |
@@ -546,6 +541,16 @@ try {
         $file = $todo[$k]
         $rel = $file.FullName.Substring($Template.Length).TrimStart('\', '/')
         $dest = Join-Path $Target $rel
+        $source = $file.FullName
+        if ($rel -eq 'PROMPT.md' -and $Graphify -ne 'yes') {
+            if (-not $script:tmp) {
+                $script:tmp = Join-Path ([IO.Path]::GetTempPath()) ("agents-md-kit-" + [guid]::NewGuid())
+                New-Item -ItemType Directory -Path $script:tmp | Out-Null
+            }
+            $source = Join-Path $script:tmp 'PROMPT.md'
+            $text = [IO.File]::ReadAllText($file.FullName) -creplace ' If graphify-out/graph[.]json exists,[^\r\n]*', ''
+            [IO.File]::WriteAllText($source, $text)
+        }
         if ($rel -eq '.gitignore' -and (Test-Path $dest)) {
             $have = @(Get-Content -LiteralPath $dest | ForEach-Object { $_.Trim() })
             $missing = @(Get-Content -LiteralPath $file.FullName | ForEach-Object { $_.Trim() } |
@@ -565,11 +570,11 @@ try {
             # in update mode also save the kit's version beside it as .kit-new.
             $isSame = $false
             if (Test-Path $dest -PathType Leaf) {
-                $isSame = ([IO.File]::ReadAllText($file.FullName) -replace "`r", "") -ceq ([IO.File]::ReadAllText($dest) -replace "`r", "")
+                $isSame = ([IO.File]::ReadAllText($source) -replace "`r", "") -ceq ([IO.File]::ReadAllText($dest) -replace "`r", "")
             }
             if ($isSame) { $same++ }
             elseif ($Update -and (Test-Path $dest -PathType Leaf)) {
-                if (-not $DryRun) { Copy-Item -LiteralPath $file.FullName -Destination "$dest.kit-new" -Force }
+                if (-not $DryRun) { Copy-Item -LiteralPath $source -Destination "$dest.kit-new" -Force }
                 $newer += $rel
             }
             else { $skipped += $rel }
@@ -577,7 +582,7 @@ try {
         }
         if (-not $DryRun) {
             New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
-            Copy-Item -LiteralPath $file.FullName -Destination $dest
+            Copy-Item -LiteralPath $source -Destination $dest
         }
         $copied++; $added += $rel
     }

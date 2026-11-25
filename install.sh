@@ -438,6 +438,25 @@ if [ "$kit_src" = local ]; then done_line "Template" "local copy"
 elif [ -n "$want_version" ]; then done_line "Template" "downloaded" "release v$want_version"
 else done_line "Template" "downloaded" "latest from GitHub"; fi
 
+# yesno "<question>" "<hint for yes>" "<hint for no>": sets $answer to yes or no (default no)
+yesno() {
+  if [ -n "$menus" ]; then
+    choose "$1" 2 "Yes|$2" "No|$3"
+    case "$answer" in 1) answer=yes ;; *) answer=no ;; esac
+  else
+    say ""; say "  ${D}$2${N}"
+    ask "$1 [y/N]:" n y n yes no
+    case "$answer" in y|yes) answer=yes ;; *) answer=no ;; esac
+  fi
+}
+
+# Ask before copying so PROMPT.md reflects the answer.
+if [ -z "$dry" ] && [ -z "$gfy_flag" ] && [ -n "$can_ask" ] && [ ! -f "$target/graphify-out/graph.json" ]; then
+  yesno "Set up graphify for this project?" \
+    "installs graphify if needed and builds the code graph" "install it later: see docs/guides/setup.md"
+  gfy_flag="$answer"
+fi
+
 # ---------- copy ----------
 copied=0; same=0; added=(); skipped=(); newer=(); gi_status=""; gi_added=()
 todo=()
@@ -451,6 +470,11 @@ for ((k = 0; k < ${#todo[@]}; k++)); do
   f="${todo[k]}"
   rel="${f#"$template"/}"
   dest="$target/$rel"
+  if [ "$rel" = PROMPT.md ] && [ "$gfy_flag" != yes ]; then
+    [ -n "${tmp:-}" ] || tmp="$(mktemp -d)"
+    sed 's/ If graphify-out\/graph[.]json exists,[^[:cntrl:]]*//' "$f" > "$tmp/PROMPT.md"
+    f="$tmp/PROMPT.md"
+  fi
   if [ "$rel" = ".gitignore" ] && [ -e "$dest" ]; then
     gi_status="checked"
     while IFS= read -r line || [ -n "$line" ]; do
@@ -525,18 +549,6 @@ case "$choice" in claude) anchor="claude-code-only-claude" ;; agents) anchor="co
 prompt_url="$repo/blob/main/PROMPTS.md#$anchor"
 prompt_skipped=""; for s in "${skipped[@]+"${skipped[@]}"}"; do [ "$s" = "PROMPT.md" ] && prompt_skipped=1; done
 
-# yesno "<question>" "<hint for yes>" "<hint for no>": sets $answer to yes or no (default no)
-yesno() {
-  if [ -n "$menus" ]; then
-    choose "$1" 2 "Yes|$2" "No|$3"
-    case "$answer" in 1) answer=yes ;; *) answer=no ;; esac
-  else
-    say ""; say "  ${D}$2${N}"
-    ask "$1 [y/N]:" n y n yes no
-    case "$answer" in y|yes) answer=yes ;; *) answer=no ;; esac
-  fi
-}
-
 # run_step "<text>" <command...>: runs it in the project folder with a spinner; output goes to $step_log
 run_step() {
   local text="$1"; shift
@@ -554,13 +566,13 @@ run_step() {
 gfy_state=""   # handled: done or declined | skipped: not possible | empty: nobody was asked
 
 graphify_step() {
-  local ans inst=() b nodes
+  local inst=() b nodes
   if [ -f "$target/graphify-out/graph.json" ]; then
     done_line "Graphify" "graph found" "the AI will query graphify-out/ first"; gfy_state=handled; return 0
   fi
-  [ -z "$gfy_flag" ] && [ -z "$can_ask" ] && return 0   # nobody to ask: the next steps mention it
+  [ -z "$gfy_flag" ] && return 0   # nobody was asked: the next steps mention it
   if [ "$gfy_flag" = no ]; then
-    done_line "Graphify" "skipped" "build a graph later: graphify update ."; gfy_state=handled; return 0
+    done_line "Graphify" "skipped" "install or build later: see docs/guides/setup.md"; gfy_state=handled; return 0
   fi
   if ! command -v graphify >/dev/null 2>&1; then
     if command -v uv >/dev/null 2>&1; then inst=(uv tool install graphifyy)
@@ -570,16 +582,7 @@ graphify_step() {
     if [ ${#inst[@]} -eq 0 ]; then
       done_line "Graphify" "not installed" "needs uv, pipx or Python. See docs/guides/setup.md"; gfy_state=skipped; return 0
     fi
-    ans="$gfy_flag"
-    if [ -z "$ans" ]; then
-      yesno "graphify is not installed. Install the official graphify?" \
-        "runs: ${inst[*]}" "you can install it later: see docs/guides/setup.md"
-      ans="$answer"
-    fi
-    if [ "$ans" != yes ]; then
-      done_line "Graphify" "not installed" "skipped, see docs/guides/setup.md"; gfy_state=handled; return 0
-    fi
-    bar_done=0; bar_total=2   # install, then build (build may still be declined)
+    bar_done=0; bar_total=2   # install, then build
     if ! run_step "Installing graphify" "${inst[@]}"; then
       bar_total=0
       done_line "Graphify" "install failed" "see docs/guides/setup.md"
@@ -598,16 +601,7 @@ graphify_step() {
   else
     done_line "Graphify" "found" "already installed"
   fi
-  ans="$gfy_flag"
-  if [ -z "$ans" ]; then
-    yesno "Build the code graph for this project now?" \
-      "runs: graphify update .  (reads your code only: no AI, no tokens)" "build it later: graphify update ."
-    ans="$answer"
-  fi
   gfy_state=handled
-  if [ "$ans" != yes ]; then
-    done_line "Graph" "not built" "build it later: graphify update ."; return 0
-  fi
   [ "$bar_total" -eq 2 ] || { bar_done=0; bar_total=1; }   # graphify was already there: one step
   if run_step "Building the code graph" graphify update .; then
     bar_total=0

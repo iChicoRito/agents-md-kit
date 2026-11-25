@@ -180,7 +180,7 @@ docs/              architecture, API, database, guides, decisions
   - `claude` and `both`: six plugins (Superpowers, Ponytail, Caveman, mattpocock-skills, ux-ui-agent-skills, unslop-ui) install when you open the project in Claude Code. The Caveman skills and design skills are installed by hand with `npx skills add`.
   - `agents`: all skills are installed with `npx skills add`.
 - Optional: the installer can install or update the primary skills (Superpowers, Ponytail, Caveman) from their official repos. It asks first (default No), or use `--skills yes|no`. Claude Code gets the plugins (needs the `claude` command), Codex gets the plain skills (needs Node.js).
-- Optional: graphify, for a queryable knowledge graph of your code. The installer offers to install the official package (`uv tool install graphifyy`) and to build the graph. It asks first (default No), or use `--graphify yes|no`. Nothing is installed or built without a yes. graphify writes `graphify-out/graph.json`, its report and its own `graphify-out/graph.html`; the kit does not restyle or replace that page.
+- Optional: graphify, for a queryable knowledge graph of your code. The installer offers to install the official package (`uv tool install graphifyy`) and to build the graph. It asks first (default No), or use `--graphify yes|no`. Nothing is installed or built without a yes. A new `PROMPT.md` includes the graphify instructions when you choose Yes. If you skip graphify, you can set it up later by following `docs/guides/setup.md` in your project. graphify writes `graphify-out/graph.json`, its report and its own `graphify-out/graph.html`; the kit does not restyle or replace that page.
 
 ## After install
 

@@ -111,24 +111,29 @@ try {
     $sysPath = "$env:SystemRoot\System32;$env:SystemRoot"
     # Runs the installer with only the fake tools on PATH. Returns the project folder.
     function Invoke-Gfy([string]$Name, [string]$ToolDir, [string[]]$Options, [bool]$WithGraph = $false) {
-        $dir = Join-Path $work "gfy-$Name"; New-Item -ItemType Directory $dir | Out-Null
+        $dir = Join-Path $work "gfy-$Name"; New-Item -ItemType Directory -Force $dir | Out-Null
         if ($WithGraph) { New-Item -ItemType Directory "$dir\graphify-out" | Out-Null; Set-Content "$dir\graphify-out\graph.json" "{}" }
         Remove-Item "$stubs\inst\graphify.cmd" -ErrorAction SilentlyContinue
         $script:gfyLog = Join-Path $stubs "log-$Name.txt"; Set-Content $script:gfyLog ""
         $oldPath = $env:PATH; $env:STUBLOG = $script:gfyLog; $env:PATH = "$ToolDir;$sysPath"
-        try { Invoke-Install (@($dir, "-For", "claude", "-Project", "new", "-Prompt", "no") + $Options) | Out-Null }
+        try { Invoke-Install (@($dir, "-For", "claude", "-Project", "new", "-Prompt", "yes") + $Options) | Out-Null }
         finally { $env:PATH = $oldPath; Remove-Item Env:STUBLOG -ErrorAction SilentlyContinue }
         $dir
     }
     function Get-StubLog { (Get-Content $script:gfyLog | Where-Object { $_.Trim() }) -join ";" }
     $gA = Invoke-Gfy "A" "$stubs\have" @("-Graphify", "yes"); $logA = Get-StubLog; $outA = $script:log
     Test-That "graphify yes (installed): graph built" { (Test-Path "$gA\graphify-out\graph.json") -and $logA -match 'graphify update \.' -and $outA -match 'built' }
+    Test-That "graphify yes: prompt includes graphify" { (Get-Content "$gA\PROMPT.md" -Raw) -match 'graphify query' }
     $gB = Invoke-Gfy "B" "$stubs\inst" @("-Graphify", "yes"); $logB = Get-StubLog
     Test-That "graphify yes (missing): installs, then builds" { $logB -match 'uv tool install graphifyy' -and $logB -match 'graphify update \.' -and (Test-Path "$gB\graphify-out\graph.json") }
     $gC = Invoke-Gfy "C" "$stubs\have" @("-Graphify", "no"); $logC = Get-StubLog; $outC = $script:log
     Test-That "graphify no: nothing runs" { -not $logC -and -not (Test-Path "$gC\graphify-out") -and $outC -match 'skipped' }
+    Test-That "graphify no: prompt omits graphify" { (Test-Path "$gC\PROMPT.md") -and (Get-Content "$gC\PROMPT.md" -Raw) -notmatch 'graphify' }
+    $null = Invoke-Gfy "C" "$stubs\have" @("-Graphify", "yes")
+    Test-That "graphify can be enabled later without replacing the prompt" { (Test-Path "$gC\graphify-out\graph.json") -and (Test-Path "$gC\PROMPT.md") -and (Get-Content "$gC\PROMPT.md" -Raw) -notmatch 'graphify' }
     $gD = Invoke-Gfy "D" "$stubs\have" @(); $logD = Get-StubLog; $outD = $script:log
     Test-That "graphify (nobody to ask): nothing runs, tip shown" { -not $logD -and -not (Test-Path "$gD\graphify-out") -and $outD -match 'Optional: build a code graph' }
+    Test-That "graphify default: prompt omits graphify" { (Test-Path "$gD\PROMPT.md") -and (Get-Content "$gD\PROMPT.md" -Raw) -notmatch 'graphify' }
     $gE = Invoke-Gfy "E" "$stubs\have" @("-Graphify", "yes") $true; $logE = Get-StubLog; $outE = $script:log
     Test-That "graphify: existing graph is left alone" { -not $logE -and $outE -match 'graph found' }
     $gG = Invoke-Gfy "G" "$stubs\have" @("-DryRun", "-Graphify", "yes"); $logG = Get-StubLog

@@ -126,16 +126,21 @@ done
 gfy() {
   local name="$1" pp="$2"; shift 2
   gdir="$work/gfy-$name"; mkdir -p "$gdir"; : > "$stubs/log-$name"; rm -f "$stubs/inst/graphify"
-  STUBLOG="$stubs/log-$name" PATH="$pp:$clean_path" bash "$kit/install.sh" --for claude --project new --prompt no "$@" "$gdir" </dev/null >"$work/gfy-$name.log" 2>&1
+  STUBLOG="$stubs/log-$name" PATH="$pp:$clean_path" bash "$kit/install.sh" --for claude --project new --prompt yes "$@" "$gdir" </dev/null >"$work/gfy-$name.log" 2>&1
 }
 gfy A "$stubs/have" --graphify yes
 check "graphify yes (installed): graph built" "[ -f '$work/gfy-A/graphify-out/graph.json' ] && grep -q 'graphify update .' '$stubs/log-A' && grep -q 'built' '$work/gfy-A.log'"
+check "graphify yes: prompt includes graphify" "grep -q 'graphify query' '$work/gfy-A/PROMPT.md'"
 gfy B "$stubs/inst" --graphify yes
 check "graphify yes (missing): installs, then builds" "grep -q 'uv tool install graphifyy' '$stubs/log-B' && grep -q 'graphify update .' '$stubs/log-B' && [ -f '$work/gfy-B/graphify-out/graph.json' ]"
 gfy C "$stubs/have" --graphify no
 check "graphify no: nothing runs" "[ ! -s '$stubs/log-C' ] && [ ! -e '$work/gfy-C/graphify-out' ] && grep -q 'skipped' '$work/gfy-C.log'"
+check "graphify no: prompt omits graphify" "[ -f '$work/gfy-C/PROMPT.md' ] && ! grep -qi graphify '$work/gfy-C/PROMPT.md'"
+gfy C "$stubs/have" --graphify yes
+check "graphify can be enabled later without replacing the prompt" "[ -f '$work/gfy-C/graphify-out/graph.json' ] && [ -f '$work/gfy-C/PROMPT.md' ] && ! grep -qi graphify '$work/gfy-C/PROMPT.md'"
 gfy D "$stubs/have"
 check "graphify (nobody to ask): nothing runs, tip shown" "[ ! -s '$stubs/log-D' ] && [ ! -e '$work/gfy-D/graphify-out' ] && grep -q 'Optional: build a code graph' '$work/gfy-D.log'"
+check "graphify default: prompt omits graphify" "[ -f '$work/gfy-D/PROMPT.md' ] && ! grep -qi graphify '$work/gfy-D/PROMPT.md'"
 mkdir -p "$work/gfy-E/graphify-out"; echo '{}' > "$work/gfy-E/graphify-out/graph.json"
 gfy E "$stubs/have" --graphify yes
 check "graphify: existing graph is left alone" "[ ! -s '$stubs/log-E' ] && grep -q 'graph found' '$work/gfy-E.log'"
