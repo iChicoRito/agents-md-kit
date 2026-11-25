@@ -9,6 +9,10 @@ All notable changes to agents-md-kit. Versions follow [semantic versioning](http
 3. Commit, push, wait for the tests to pass.
 4. Tag and publish: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`.
 
+## 2.1.1 - 2026-11-26
+
+- The graphify.md rule files are plain UTF-8 again. A UTF-16 copy broke `agents-md-kit --check` on macOS.
+
 ## 2.1.0 - 2026-11-26
 
 - **graphify is back as an optional step, with its own default view.** It asks first (default No), can install the official package (`uv tool install graphifyy`), and can build the graph (`graphify update .`, code only, no AI). Skip the questions with `--graphify yes|no` (PowerShell: `-Graphify yes` / `-Graphify no`).
