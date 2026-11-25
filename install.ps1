@@ -13,7 +13,7 @@
 # so the Unicode symbols are built from code points.
 #   -Update                    project already has the kit: add missing files, and save the
 #                              newer kit version of changed files as <file>.kit-new
-param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$DryRun, [switch]$AddCommand, [string]$ProfilePath = $PROFILE, [switch]$Check, [switch]$GraphView, [string]$Graphify = "", [switch]$Help)
+param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$DryRun, [switch]$AddCommand, [string]$ProfilePath = $PROFILE, [switch]$Check, [switch]$GraphView, [string]$Graphify = "", [string]$Skills = "", [switch]$Help)
 $ErrorActionPreference = 'Stop'
 
 $kitVersion = "1.6.0"   # keep equal to the VERSION file (the tests check this)
@@ -55,15 +55,19 @@ function Write-Done([string]$Label, [string]$Value, [string]$Note = "") {
     if ($Note) { Write-Part " $SEP $Note" Dim }
     Write-Host ""
 }
+# Writes the bar and percent for a progress given in thousandths of a step, out of Total steps.
+function Write-Bar([int]$Thousandths, [int]$Total) {
+    $w = 28; $t = [Math]::Max($Total, 1)
+    $fill = [int][Math]::Floor($Thousandths * $w / ($t * 1000)); $pct = [int][Math]::Floor($Thousandths * 100 / ($t * 1000))
+    Write-Part ($FULL * $fill) Accent; Write-Part ($EMPTY * ($w - $fill)) Dim
+    Write-Part (" {0,3}%  " -f $pct)
+}
 # One redrawn line: "Installing [bar] 52%  13/25". Nothing without ANSI support.
 # The short pause per file only makes the bar visible; the copy itself takes a blink.
 function Write-Progress-Bar([int]$Done, [int]$Total) {
     if (-not $vt) { return }
-    $w = 28; $t = [Math]::Max($Total, 1)
-    $fill = [int][Math]::Floor($Done * $w / $t); $pct = [int][Math]::Floor($Done * 100 / $t)
     Write-Host "`r" -NoNewline; Write-Part $SPIN[$Done % $SPIN.Count] Accent; Write-Part " Installing  "
-    Write-Part ($FULL * $fill) Accent; Write-Part ($EMPTY * ($w - $fill)) Dim
-    Write-Part (" {0,3}%  " -f $pct); Write-Part "$Done/$Total" Dim
+    Write-Bar ($Done * 1000) $Total; Write-Part "$Done/$Total" Dim
     Start-Sleep -Milliseconds 15
 }
 function Write-Fail([string]$Message) {
@@ -107,6 +111,10 @@ if ($Help) {
     Write-Host "    -Graphify yes|no     graphify, the code knowledge graph: yes = install it if missing"
     Write-Host "                         and build the graph without asking, no = skip it (default: ask)"
     Write-Host ""
+    Write-Host "    -Skills yes|no       primary skills (Superpowers, Ponytail, Caveman, official repos):"
+    Write-Host "                         yes = install them, or update those already installed, without"
+    Write-Host "                         asking; no = skip (default: ask)"
+    Write-Host ""
     Write-Part "  Options you leave out are asked. Target folder: current folder if not given." Dim -End
     Write-Host ""
     return
@@ -136,6 +144,7 @@ if ($For -and $For -notin @("claude", "agents", "both")) { Write-Fail "Unknown -
 if ($Project -and $Project -notin @("new", "existing")) { Write-Fail "Unknown -Project value: $Project (use new or existing)"; return }
 if ($Prompt -and $Prompt -notin @("yes", "no")) { Write-Fail "Unknown -Prompt value: $Prompt (use yes or no)"; return }
 if ($Graphify -and $Graphify -notin @("yes", "no")) { Write-Fail "Unknown -Graphify value: $Graphify (use yes or no)"; return }
+if ($Skills -and $Skills -notin @("yes", "no")) { Write-Fail "Unknown -Skills value: $Skills (use yes or no)"; return }
 # A pinned version downloads that release; "1.0.0" and "v1.0.0" both work.
 $Version = $Version -replace '^v', ''
 if ($Version) {
@@ -409,6 +418,9 @@ Write-Done "PROMPT.md" $Prompt $promptNote
 
 # ---------- graphify (optional): asks first, never installs or builds without a yes ----------
 # Runs a command in the project folder with a spinner. Returns Ok and the last output.
+# While $script:barTotal is set (steps in the current group, $script:barDone finished) it also shows the
+# progress bar. The running step creeps toward its end but never reaches it: we cannot know how long it takes.
+$script:barDone = 0; $script:barTotal = 0
 function Invoke-Spinner([string]$Text, [string]$Exe, [string[]]$CmdArgs, [string]$Dir) {
     $job = Start-Job -ArgumentList $Exe, $CmdArgs, $Dir -ScriptBlock {
         param($exe, $cmdArgs, $dir)
@@ -419,7 +431,9 @@ function Invoke-Spinner([string]$Text, [string]$Exe, [string[]]$CmdArgs, [string
     if ($vt) {
         try { [Console]::CursorVisible = $false } catch {}
         for ($i = 0; $job.State -eq 'Running'; $i++) {
-            Write-Host "`r" -NoNewline; Write-Part $SPIN[$i % $SPIN.Count] Accent; Write-Part " $Text "; Write-Part "($([int][Math]::Floor($i / 10))s)" Dim
+            Write-Host "`r$E[2K" -NoNewline; Write-Part $SPIN[$i % $SPIN.Count] Accent; Write-Part " $Text "
+            if ($script:barTotal -gt 0) { Write-Bar ($script:barDone * 1000 + 1000 - [int](100000 / (100 + $i))) $script:barTotal; Write-Part "$($script:barDone)/$($script:barTotal)  " Dim }
+            Write-Part "($([int][Math]::Floor($i / 10))s)" Dim
             Start-Sleep -Milliseconds 100
         }
         Write-Host "`r$E[2K" -NoNewline
@@ -427,6 +441,7 @@ function Invoke-Spinner([string]$Text, [string]$Exe, [string[]]$CmdArgs, [string
     } else { Write-Part "  $DOT $Text..." -End }
     $res = @(Receive-Job $job -Wait) | Select-Object -Last 1
     Remove-Job $job -Force
+    if ($script:barTotal -gt 0) { $script:barDone++ }
     [pscustomobject]@{ Ok = [bool]($res -and $res.Code -eq 0); Out = "$($res.Out)" }
 }
 
@@ -461,8 +476,10 @@ function Invoke-GraphifyStep {
             $yes = Read-YesNo "graphify is not installed. Install the official graphify?" "runs: $($inst -join ' ')" "you can install it later: see docs/guides/setup.md"
         }
         if (-not $yes) { Write-Done "Graphify" "not installed" "skipped, see docs/guides/setup.md"; return "handled" }
+        $script:barDone = 0; $script:barTotal = 2   # install, then build (build may still be declined)
         $r = Invoke-Spinner "Installing graphify" $inst[0] $inst[1..($inst.Count - 1)] $Target
         if (-not $r.Ok) {
+            $script:barTotal = 0
             Write-Done "Graphify" "install failed" "see docs/guides/setup.md"
             $r.Out -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 3 | ForEach-Object { Write-Part "        $_" Dim -End }
             return "skipped"
@@ -484,7 +501,9 @@ function Invoke-GraphifyStep {
         $build = Read-YesNo "Build the code graph for this project now?" "runs: graphify update .  (reads your code only: no AI, no tokens)" "build it later: graphify update ."
     }
     if (-not $build) { Write-Done "Graph" "not built" "build it later: graphify update ."; return "handled" }
+    if ($script:barTotal -ne 2) { $script:barDone = 0; $script:barTotal = 1 }   # graphify was already there: one step
     $r = Invoke-Spinner "Building the code graph" "graphify" @("update", ".") $Target
+    $script:barTotal = 0
     if ($r.Ok) {
         $nodes = if ($r.Out -match 'Rebuilt: ([^\r\n\[]+)') { $Matches[1].Trim() } else { "" }
         Write-Done "Graph" "built" "$(if ($nodes) { "$nodes $SEP " })graphify-out/"
@@ -496,6 +515,64 @@ function Invoke-GraphifyStep {
         Write-Done "Graph" "build failed" "run graphify update . yourself to see why"
         $r.Out -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 3 | ForEach-Object { Write-Part "        $_" Dim -End }
     }
+    return "handled"
+}
+
+# ---------- primary skills (optional): Superpowers, Ponytail, Caveman from their official repos ----------
+# Asks first (default No). Already installed: only updated. Claude Code gets the plugins
+# (claude plugin ...); Codex / other agents get the skills (npx skills ...).
+# Returns "handled" (done or declined) or "" (nobody was asked).
+$skillList = @(
+    @{ Id = "superpowers@superpowers-dev"; Repo = "obra/superpowers" },
+    @{ Id = "ponytail@ponytail"; Repo = "DietrichGebert/ponytail" },
+    @{ Id = "caveman@caveman"; Repo = "JuliusBrussee/caveman" }
+)
+function Invoke-SkillsStep {
+    if (-not $Skills -and -not $canAsk) { return "" }   # nobody to ask: the next steps mention it
+    $later = "install later: see docs/guides/setup.md"
+    if ($Skills -eq "no") { Write-Done "Skills" "skipped" $later; return "handled" }
+    $yes = ($Skills -eq "yes")
+    if (-not $Skills) {
+        $yes = Read-YesNo "Install or update the primary skills (Superpowers, Ponytail, Caveman)?" "official repos. Skills you already have are only updated" $later
+    }
+    if (-not $yes) { Write-Done "Skills" "skipped" $later; return "handled" }
+    $ok = 0; $last = $null
+    $script:barDone = 0; $script:barTotal = 0
+    if ($For -ne "agents" -and (Get-Command claude -ErrorAction SilentlyContinue)) { $script:barTotal += $skillList.Count }
+    if ($For -ne "claude" -and (Get-Command npx -ErrorAction SilentlyContinue)) { $script:barTotal += $skillList.Count }
+    if ($For -ne "agents") {
+        if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
+            Write-Done "Claude Code" "skipped" "the claude command was not found. See docs/guides/setup.md"
+        } else {
+            $installed = "$(& claude plugin list 2>$null)"
+            foreach ($sk in $skillList) {
+                $name = $sk.Id.Split("@")[0]; $mk = $sk.Id.Split("@")[1]
+                if ($installed -match "(?m)\s$([regex]::Escape($sk.Id))\s*$") {
+                    & claude plugin marketplace update $mk *> $null
+                    $r = Invoke-Spinner "Updating $name" "claude" @("plugin", "update", $sk.Id, "-y") $Target
+                    if ($r.Ok) { Write-Done $name "up to date" "Claude Code plugin"; $ok++ } else { Write-Done $name "update failed" "run: claude plugin update $($sk.Id)"; $last = $r }
+                } else {
+                    $r = Invoke-Spinner "Installing $name" "claude" @("plugin", "install", $name, "--marketplace", $sk.Repo, "-y") $Target
+                    if ($r.Ok) { Write-Done $name "installed" "Claude Code plugin from $($sk.Repo)"; $ok++ } else { Write-Done $name "install failed" "run: claude plugin install $name --marketplace $($sk.Repo)"; $last = $r }
+                }
+            }
+        }
+    }
+    if ($For -ne "claude") {
+        if (-not (Get-Command npx -ErrorAction SilentlyContinue)) {
+            Write-Done "Codex" "skipped" "needs Node.js (npx). See docs/guides/setup.md"
+        } else {
+            foreach ($sk in $skillList) {
+                $name = $sk.Id.Split("@")[0]
+                # npx skills add fetches the latest version, so it also updates what is already there
+                $r = Invoke-Spinner "Installing $name for Codex" "npx" @("--yes", "skills", "add", $sk.Repo, "--skill", "*", "--agent", "codex", "--global", "-y") $Target
+                if ($r.Ok) { Write-Done $name "installed or updated" "skills from $($sk.Repo)"; $ok++ } else { Write-Done $name "failed" "run: npx skills add $($sk.Repo)"; $last = $r }
+            }
+        }
+    }
+    $script:barTotal = 0
+    if ($last) { $last.Out -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 3 | ForEach-Object { Write-Part "        $_" Dim -End } }
+    if ($ok -gt 0 -and $For -ne "agents") { Write-Part "    $ELB restart Claude Code to load new or updated plugins" Dim -End }
     return "handled"
 }
 
@@ -582,6 +659,8 @@ try {
     if ($skipped.Count) { Write-Part "      Files marked ! were kept as they are. Merge the kit's version by hand if you want it." Dim -End }
     $gfyState = ""
     if (-not $DryRun) { $gfyState = "$(Invoke-GraphifyStep)" }
+    $skillsState = ""
+    if (-not $DryRun) { $skillsState = "$(Invoke-SkillsStep)" }
 
     # ---------- next steps ----------
     $main = if ($For -eq "agents") { "AGENTS.md" } else { "CLAUDE.md" }
@@ -628,7 +707,8 @@ try {
         Write-Part " as you build." -End
         Write-Part "       Later, to let your AI fill them from your code: $promptUrl" Dim -End
     }
-    Write-Part "    2" Accent; Write-Part "  Install the skills: "; Write-Part "docs/guides/setup.md" Bold -End
+    if ($skillsState) { Write-Part "    2" Accent; Write-Part "  Other skills (design, commit): "; Write-Part "docs/guides/setup.md" Bold -End }
+    else { Write-Part "    2" Accent; Write-Part "  Install the skills: "; Write-Part "docs/guides/setup.md" Bold -End }
     if ($For -eq "agents") {
         Write-Part "    3" Accent; Write-Part "  Start your agent and ask it to read "; Write-Part "AGENTS.md" Bold -End
     } else {

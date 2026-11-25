@@ -87,13 +87,17 @@ usage() {
     --graphify yes|no     graphify, the code knowledge graph: yes = install it if missing and
                           build the graph without asking, no = skip it (default: ask)
 
+    --skills yes|no       primary skills (Superpowers, Ponytail, Caveman, official repos):
+                          yes = install them, or update those already installed, without
+                          asking; no = skip (default: ask)
+
   ${D}Options you leave out are asked. Target folder: current folder if not given.${N}
 
 EOF
 }
 
 # ---------- arguments ----------
-choice=""; project=""; prompt=""; update=""; want_version=""; dry=""; add_cmd=""; check=""; gview=""; gfy_flag=""; gfy_log=""; target="$PWD"
+choice=""; project=""; prompt=""; update=""; want_version=""; dry=""; add_cmd=""; check=""; gview=""; gfy_flag=""; skills_flag=""; gfy_log=""; target="$PWD"
 need_value() { [ "$2" -ge 2 ] || fail "$1 needs a value (see --help)"; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -113,6 +117,8 @@ while [ $# -gt 0 ]; do
     --graph-view) gview=1; shift ;;
     --graphify) need_value "$1" $#; gfy_flag="$2"; shift 2 ;;
     --graphify=*) gfy_flag="${1#--graphify=}"; shift ;;
+    --skills) need_value "$1" $#; skills_flag="$2"; shift 2 ;;
+    --skills=*) skills_flag="${1#--skills=}"; shift ;;
     -*) fail "Unknown option: $1 (see --help)" ;;
     *) target="$1"; shift ;;
   esac
@@ -186,6 +192,7 @@ case "$choice" in ""|claude|agents|both) ;; *) fail "Unknown --for value: $choic
 case "$project" in ""|new|existing) ;; *) fail "Unknown --project value: $project (use new or existing)" ;; esac
 case "$prompt" in ""|yes|no) ;; *) fail "Unknown --prompt value: $prompt (use yes or no)" ;; esac
 case "$gfy_flag" in ""|yes|no) ;; *) fail "Unknown --graphify value: $gfy_flag (use yes or no)" ;; esac
+case "$skills_flag" in ""|yes|no) ;; *) fail "Unknown --skills value: $skills_flag (use yes or no)" ;; esac
 # A pinned version downloads that release; "1.0.0" and "v1.0.0" both work.
 want_version="${want_version#v}"
 if [ -n "$want_version" ]; then
@@ -229,24 +236,38 @@ cleanup() {
 trap cleanup EXIT
 trap 'printf "\n\n  %s%s%s Cancelled. Files already copied stay; run again to finish.\n\n" "$Y" "$DOT" "$N"; exit 130' INT
 
+# barfmt <progress in thousandths of a step> <total steps>: sets $barout to the colored bar and percent.
+barfmt() {
+  local w=28 t=$(( $2 > 0 ? $2 : 1 )) fill pct on="" off="" i
+  fill=$(( $1 * w / (t * 1000) )); pct=$(( $1 * 100 / (t * 1000) ))
+  for ((i = 0; i < w; i++)); do if [ $i -lt $fill ]; then on+="$FULL"; else off+="$EMPTY"; fi; done
+  barout="$A$on$N$D$off$N $(printf '%3d%%' "$pct")"
+}
+
 # progress <done> <total>: one redrawn line "Installing [bar] 52% 13/25" (nothing without ANSI).
 # The short pause per file only makes the bar visible; the copy itself takes a blink.
 progress() {
   [ -n "$ansi" ] || return 0
-  local w=28 fill=$(( $1 * 28 / ($2 > 0 ? $2 : 1) )) pct=$(( $1 * 100 / ($2 > 0 ? $2 : 1) )) on="" off="" i
-  for ((i = 0; i < w; i++)); do if [ $i -lt $fill ]; then on+="$FULL"; else off+="$EMPTY"; fi; done
-  printf '\r  %s%s%s Installing  %s%s%s%s%s%s %3d%%  %s%d/%d%s' "$A" "${SPIN[$1 % ${#SPIN[@]}]}" "$N" \
-    "$A" "$on" "$N" "$D" "$off" "$N" "$pct" "$D" "$1" "$2" "$N"
+  barfmt $(( $1 * 1000 )) "$2"
+  printf '\r  %s%s%s Installing  %s  %s%d/%d%s' "$A" "${SPIN[$1 % ${#SPIN[@]}]}" "$N" "$barout" "$D" "$1" "$2" "$N"
   sleep 0.015
 }
 
-# spin "<text>" <pid>: animated spinner until the process ends (plain line without ANSI).
+# spin "<text>" <pid>: animated line until the process ends (plain line without ANSI).
+# When $bar_total is set (steps in the current group, $bar_done finished) it also shows the progress bar.
+# The running step creeps toward its end but never reaches it: we cannot know how long it takes.
+bar_done=0; bar_total=0
 spin() {
   if [ -z "$ansi" ]; then printf '  %s %s...\n' "$DOT" "$1"; return; fi
-  local i=0
+  local i=0 part=""
   printf '\033[?25l'
   while kill -0 "$2" 2>/dev/null; do
-    printf '\r  %s%s%s %s %s(%ds)%s' "$A" "${SPIN[i % ${#SPIN[@]}]}" "$N" "$1" "$D" $((i / 10)) "$N"
+    part=""
+    if [ "$bar_total" -gt 0 ]; then
+      barfmt $(( bar_done * 1000 + 1000 - 100000 / (100 + i) )) "$bar_total"
+      part=" $barout  $D$bar_done/$bar_total$N"
+    fi
+    printf '\r\033[2K  %s%s%s %s%s %s(%ds)%s' "$A" "${SPIN[i % ${#SPIN[@]}]}" "$N" "$1" "$part" "$D" $((i / 10)) "$N"
     i=$((i + 1)); sleep 0.1
   done
   printf '\r\033[2K\033[?25h'
@@ -562,10 +583,12 @@ yesno() {
 # gfy_run "<text>" <command...>: runs it in the project folder with a spinner; output goes to $gfy_log
 gfy_run() {
   local text="$1"; shift
-  gfy_log="$(mktemp)"
+  rm -f "$gfy_log"; gfy_log="$(mktemp)"
   ( cd "$target" && "$@" ) >"$gfy_log" 2>&1 & local pid=$!
   spin "$text" "$pid"
-  wait "$pid"
+  local rc=0; wait "$pid" || rc=$?
+  [ "$bar_total" -gt 0 ] && bar_done=$((bar_done + 1))
+  return $rc
 }
 
 graphify_step() {
@@ -594,7 +617,9 @@ graphify_step() {
     if [ "$ans" != yes ]; then
       done_line "Graphify" "not installed" "skipped, see docs/guides/setup.md"; gfy_state=handled; return 0
     fi
+    bar_done=0; bar_total=2   # install, then build (build may still be declined)
     if ! gfy_run "Installing graphify" "${inst[@]}"; then
+      bar_total=0
       done_line "Graphify" "install failed" "see docs/guides/setup.md"
       tail -3 "$gfy_log" | sed "s/^/        ${D}/; s/\$/${N}/"; gfy_state=skipped; return 0
     fi
@@ -621,7 +646,9 @@ graphify_step() {
   if [ "$ans" != yes ]; then
     done_line "Graph" "not built" "build it later: graphify update ."; return 0
   fi
+  [ "$bar_total" -eq 2 ] || { bar_done=0; bar_total=1; }   # graphify was already there: one step
   if gfy_run "Building the code graph" graphify update .; then
+    bar_total=0
     nodes="$(grep -o 'Rebuilt: [^[]*' "$gfy_log" | tail -1 | sed 's/^Rebuilt: //' || true)"
     done_line "Graph" "built" "${nodes:+$nodes $SEP }graphify-out/"
     if nodes="$(make_view 2>/dev/null)"; then
@@ -631,11 +658,74 @@ graphify_step() {
     fi
     say "    ${D}${ELB} commit graphify-out/ to share it, or add it to .gitignore to keep it local${N}"
   else
+    bar_total=0
     done_line "Graph" "build failed" "run graphify update . yourself to see why"
     tail -3 "$gfy_log" | sed "s/^/        ${D}/; s/\$/${N}/"
   fi
 }
 if [ -z "$dry" ]; then graphify_step; fi
+
+# ---------- primary skills (optional): Superpowers, Ponytail, Caveman from their official repos ----------
+# Asks first (default No). Already installed: only updated. Claude Code gets the plugins
+# (claude plugin ...); Codex / other agents get the skills (npx skills ...).
+skills_state=""   # handled: done or declined | empty: nobody was asked
+# plugin id | marketplace name | official repo
+skill_list=("superpowers@superpowers-dev|obra/superpowers" "ponytail@ponytail|DietrichGebert/ponytail" "caveman@caveman|JuliusBrussee/caveman")
+
+skills_step() {
+  local ans item id repo mk installed="" ok=0 bad=0 npx_bad=0
+  [ -z "$skills_flag" ] && [ -z "$can_ask" ] && return 0   # nobody to ask: the next steps mention it
+  if [ "$skills_flag" = no ]; then
+    done_line "Skills" "skipped" "install later: see docs/guides/setup.md"; skills_state=handled; return 0
+  fi
+  ans="$skills_flag"
+  if [ -z "$ans" ]; then
+    yesno "Install or update the primary skills (Superpowers, Ponytail, Caveman)?"       "official repos. Skills you already have are only updated" "install later: see docs/guides/setup.md"
+    ans="$answer"
+  fi
+  skills_state=handled
+  if [ "$ans" != yes ]; then
+    done_line "Skills" "skipped" "install later: see docs/guides/setup.md"; return 0
+  fi
+  bar_done=0; bar_total=0
+  [ "$choice" != agents ] && command -v claude >/dev/null 2>&1 && bar_total=$((bar_total + ${#skill_list[@]}))
+  [ "$choice" != claude ] && command -v npx >/dev/null 2>&1 && bar_total=$((bar_total + ${#skill_list[@]}))
+  if [ "$choice" != agents ]; then
+    if ! command -v claude >/dev/null 2>&1; then
+      done_line "Claude Code" "skipped" "the claude command was not found. See docs/guides/setup.md"
+    else
+      installed="$(claude plugin list 2>/dev/null | tr -d '\r' || true)"
+      for item in "${skill_list[@]}"; do
+        id="${item%%|*}"; repo="${item#*|}"; mk="${id#*@}"
+        if printf '%s\n' "$installed" | grep -qE "[[:space:]]${id}\$"; then
+          claude plugin marketplace update "$mk" >/dev/null 2>&1 || true
+          if gfy_run "Updating ${id%@*}" claude plugin update "$id" -y; then done_line "${id%@*}" "up to date" "Claude Code plugin"; ok=$((ok + 1))
+          else done_line "${id%@*}" "update failed" "run: claude plugin update $id"; bad=$((bad + 1)); fi
+        else
+          if gfy_run "Installing ${id%@*}" claude plugin install "${id%@*}" --marketplace "$repo" -y; then done_line "${id%@*}" "installed" "Claude Code plugin from $repo"; ok=$((ok + 1))
+          else done_line "${id%@*}" "install failed" "run: claude plugin install ${id%@*} --marketplace $repo"; bad=$((bad + 1)); fi
+        fi
+      done
+    fi
+  fi
+  if [ "$choice" != claude ]; then
+    if ! command -v npx >/dev/null 2>&1; then
+      done_line "Codex" "skipped" "needs Node.js (npx). See docs/guides/setup.md"
+    else
+      for item in "${skill_list[@]}"; do
+        id="${item%%|*}"; repo="${item#*|}"
+        # npx skills add fetches the latest version, so it also updates what is already there
+        if gfy_run "Installing ${id%@*} for Codex" npx --yes skills add "$repo" --skill '*' --agent codex --global -y; then done_line "${id%@*}" "installed or updated" "skills from $repo"; ok=$((ok + 1))
+        else done_line "${id%@*}" "failed" "run: npx skills add $repo"; bad=$((bad + 1)); fi
+      done
+    fi
+  fi
+  bar_total=0
+  [ "$bad" -gt 0 ] && tail -3 "$gfy_log" | sed "s/^/        ${D}/; s/\$/${N}/"
+  [ "$ok" -gt 0 ] && [ "$choice" != agents ] && say "    ${D}${ELB} restart Claude Code to load new or updated plugins${N}"
+  return 0
+}
+if [ -z "$dry" ]; then skills_step; fi
 
 # ---------- next steps ----------
 say ""
@@ -676,7 +766,8 @@ else
   say "    ${A}1${N}  Fill the [PLACEHOLDERS] in ${B}$main${N} and ${B}docs/${N} as you build."
   say "       ${D}Later, to let your AI fill them from your code: $prompt_url${N}"
 fi
-say "    ${A}2${N}  Install the skills: ${B}docs/guides/setup.md${N}"
+if [ -n "$skills_state" ]; then say "    ${A}2${N}  Other skills (design, commit): ${B}docs/guides/setup.md${N}"
+else say "    ${A}2${N}  Install the skills: ${B}docs/guides/setup.md${N}"; fi
 if [ "$choice" = agents ]; then
   say "    ${A}3${N}  Start your agent and ask it to read ${B}AGENTS.md${N}"
 else

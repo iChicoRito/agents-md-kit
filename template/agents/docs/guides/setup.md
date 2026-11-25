@@ -9,6 +9,8 @@ Run the project locally.
 
 This project uses global skills. They are not copied into the repo. Install them with `npx skills add` (needs Node.js). Pick your agent as the target when asked:
 
+The kit installer can install or update the primary skills (Superpowers, Ponytail, Caveman) for you. It asks first (default No). To skip the question: `--skills yes|no`.
+
 ```bash
 npx skills add obra/superpowers                         # brainstorming, writing-plans, systematic-debugging and more
 npx skills add DietrichGebert/ponytail                  # ponytail, ponytail-review, ponytail-audit and more

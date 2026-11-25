@@ -9,6 +9,13 @@ All notable changes to agents-md-kit. Versions follow [semantic versioning](http
 3. Commit, push, wait for the tests to pass.
 4. Tag and publish: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`.
 
+## Unreleased
+
+- New installer question: install or update the primary skills (Superpowers, Ponytail, Caveman) from their official repos. Default No. Skip the question with `--skills yes|no` (PowerShell: `-Skills`).
+- Claude Code (`claude`, `both`): installs the plugins with `claude plugin install`. A plugin that is already installed is only updated with `claude plugin update`.
+- Codex / other agents (`agents`, `both`): runs `npx skills add` for each repo, which fetches the latest version.
+- Installing graphify, building the graph and installing the skills now show a progress bar, like the file copy. The bar counts steps; the running step moves toward its end but only completes when it really finishes.
+
 ## 1.6.0 - 2026-11-23
 
 - Faster graph view: smooth (60 fps) with 10,000+ nodes while the layout settles, zooming and dragging. Before, it slowed down above about 1,000 nodes.
