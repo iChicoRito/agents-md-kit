@@ -148,7 +148,7 @@ sk="$work/sk"; mkdir -p "$sk"
 cat > "$sk/claude" <<'STUB'
 #!/bin/sh
 echo "claude $*" >> "$STUBLOG"
-if [ "$1 $2" = "plugin list" ]; then printf '  \342\235\257 caveman@caveman\n    Version: 2.7.0\n'; fi
+if [ "$1 $2" = "plugin list" ]; then printf '  \342\235\257 superpowers@other\n    Version: 1\n\n  \342\235\257 caveman@caveman\n    Version: 2.7.0\n\n  \342\235\257 mattpocock-skills@mattpocock\n    Version: 1\n'; fi
 STUB
 cat > "$sk/npx" <<'STUB'
 #!/bin/sh
@@ -164,9 +164,11 @@ skl() {
 skl A --for claude --skills yes
 check "skills yes (claude): missing plugins installed from official repos" "grep -q 'plugin install superpowers --marketplace obra/superpowers' '$sk/log-A' && grep -q 'plugin install ponytail --marketplace DietrichGebert/ponytail' '$sk/log-A'"
 check "skills yes (claude): installed plugin is only updated" "grep -q 'plugin update caveman@caveman' '$sk/log-A' && ! grep -q 'plugin install caveman' '$sk/log-A'"
+check "skills yes (claude): restart note shown" "grep -q 'restart Claude Code' '$work/sk-A.log'"
 check "skills yes (claude): no npx" "! grep -q '^npx' '$sk/log-A'"
 skl B --for agents --skills yes
 check "skills yes (agents): npx skills add for all three, codex only, no claude" "grep -c 'skills add' '$sk/log-B' | grep -qx 3 && grep -q -- '--agent codex --global' '$sk/log-B' && ! grep -q '^claude' '$sk/log-B' && ! grep -q claude-code '$sk/log-B'"
+check "skills (agents): no restart note" "! grep -q 'restart Claude Code' '$work/sk-B.log'"
 skl C --for both --skills yes
 check "skills yes (both): plugins for claude, skills for codex" "grep -q '^claude plugin install' '$sk/log-C' && grep -c '^npx' '$sk/log-C' | grep -qx 3"
 mkdir -p "$work/home-H/.claude/skills/ponytail" "$work/sk-H"; : > "$sk/log-H"

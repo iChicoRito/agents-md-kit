@@ -45,7 +45,7 @@ fi
 say()  { printf '%s\n' "$*"; }
 fail() { printf '\n  %s%s Error:%s %s\n\n' "$RD$B" "$DOT" "$N" "$*" >&2; exit 1; }
 # done_line "<label>" "<value>" ["<note>"]: one finished step, like Claude Code's tool lines
-done_line() { printf '  %s%s%s %-10s %s%s%s%s\n' "$G" "$DOT" "$N" "$1" "$B" "$2" "$N" "${3:+ $D$SEP $3$N}"; }
+done_line() { printf '  %s%s%s %-12s %s%s%s%s\n' "$G" "$DOT" "$N" "$1" "$B" "$2" "$N" "${3:+ $D$SEP $3$N}"; }
 files() { if [ "$1" = 1 ]; then echo "1 file"; else echo "$1 files"; fi; }
 rule() { local s="" i; for ((i = 0; i < $1; i++)); do s+="$H"; done; printf '%s' "$s"; }
 
@@ -674,7 +674,7 @@ skills_state=""   # handled: done or declined | empty: nobody was asked
 skill_list=("superpowers|superpowers@superpowers-dev|obra/superpowers|brainstorming" "ponytail|ponytail@ponytail|DietrichGebert/ponytail|ponytail" "caveman|caveman@caveman|JuliusBrussee/caveman|caveman")
 
 skills_step() {
-  local ans item name id repo marker rest installed="" ok=0 bad=0 have_claude="" have_npx=""
+  local ans item name id repo marker rest installed="" ok=0 ok_claude=0 bad=0 have_claude="" have_npx=""
   [ -z "$skills_flag" ] && [ -z "$can_ask" ] && return 0   # nobody to ask: the next steps mention it
   if [ "$skills_flag" = no ]; then
     done_line "Skills" "skipped" "install later: see docs/guides/setup.md"; skills_state=handled; return 0
@@ -702,13 +702,13 @@ skills_step() {
       name="${item%%|*}"; rest="${item#*|}"; id="${rest%%|*}"; rest="${rest#*|}"; repo="${rest%%|*}"; marker="${rest#*|}"
       if printf '%s\n' "$installed" | grep -qE "[[:space:]]${id}\$"; then
         claude plugin marketplace update "${id#*@}" >/dev/null 2>&1 || true
-        if gfy_run "Updating $name" claude plugin update "$id" -y; then done_line "$name" "up to date" "Claude Code plugin"; ok=$((ok + 1))
+        if gfy_run "Updating $name" claude plugin update "$id" -y; then done_line "$name" "up to date" "Claude Code plugin"; ok=$((ok + 1)); ok_claude=$((ok_claude + 1))
         else done_line "$name" "update failed" "run: claude plugin update $id"; bad=$((bad + 1)); fi
       elif [ -e "$HOME/.claude/skills/$marker" ]; then
         bar_done=$((bar_done + 1))
         done_line "$name" "skipped" "already in ~/.claude/skills (installed as skills, not a plugin)"
       else
-        if gfy_run "Installing $name" claude plugin install "$name" --marketplace "$repo" -y; then done_line "$name" "installed" "Claude Code plugin from $repo"; ok=$((ok + 1))
+        if gfy_run "Installing $name" claude plugin install "$name" --marketplace "$repo" -y; then done_line "$name" "installed" "Claude Code plugin from $repo"; ok=$((ok + 1)); ok_claude=$((ok_claude + 1))
         else done_line "$name" "install failed" "run: claude plugin install $name --marketplace $repo"; bad=$((bad + 1)); fi
       fi
     done
@@ -725,7 +725,7 @@ skills_step() {
   fi
   bar_total=0
   [ "$bad" -gt 0 ] && tail -3 "$gfy_log" | sed "s/^/        ${D}/; s/\$/${N}/"
-  [ "$ok" -gt 0 ] && [ -n "$have_claude" ] && say "    ${D}${ELB} restart Claude Code to load new or updated plugins${N}"
+  [ "$ok_claude" -gt 0 ] && say "    ${D}${ELB} restart Claude Code to load new or updated plugins${N}"
   return 0
 }
 if [ -z "$dry" ]; then skills_step; fi

@@ -137,7 +137,7 @@ try {
     "== skills"
     # Asks first, installs or updates only with a yes. Fake claude and npx, empty fake home.
     $sk = Join-Path $work "sk"; New-Item -ItemType Directory $sk | Out-Null
-    [IO.File]::WriteAllText("$sk\claude.cmd", "@echo off`r`necho claude %* >> `"%STUBLOG%`"`r`nif `"%1 %2`"==`"plugin list`" echo   * caveman@caveman`r`n")
+    [IO.File]::WriteAllText("$sk\claude.cmd", "@echo off`r`necho claude %* >> `"%STUBLOG%`"`r`nif `"%1 %2`"==`"plugin list`" ( echo   * superpowers@other& echo   * caveman@caveman& echo   * mattpocock-skills@mattpocock )`r`n")
     [IO.File]::WriteAllText("$sk\npx.cmd", "@echo off`r`necho npx %* >> `"%STUBLOG%`"`r`n")
     function Invoke-Skl([string]$Name, [string[]]$Options, [string]$FakeHome = "") {
         $dir = Join-Path $work "sk-$Name"; New-Item -ItemType Directory $dir | Out-Null
@@ -151,7 +151,9 @@ try {
     function Get-SklLog { (Get-Content $script:sklLog | Where-Object { $_.Trim() }) -join ";" }
     Invoke-Skl "A" @("-For", "claude", "-Skills", "yes"); $lA = Get-SklLog
     Test-That "skills yes (claude): missing plugins installed, installed one only updated, no npx" { $lA -match 'plugin install superpowers --marketplace obra/superpowers' -and $lA -match 'plugin install ponytail --marketplace DietrichGebert/ponytail' -and $lA -match 'plugin update caveman@caveman' -and $lA -notmatch 'plugin install caveman' -and $lA -notmatch 'npx' }
+    Test-That "skills: restart note shown after a Claude plugin change" { $script:log -match 'restart Claude Code' }
     Invoke-Skl "B" @("-For", "agents", "-Skills", "yes"); $lB = Get-SklLog
+    Test-That "skills (agents): no restart note" { $script:log -notmatch 'restart Claude Code' }
     Test-That "skills yes (agents): npx skills add for all three, codex only, no claude" { ([regex]::Matches($lB, 'skills add')).Count -eq 3 -and $lB -match '--agent codex --global' -and $lB -notmatch 'claude' }
     Invoke-Skl "C" @("-For", "both", "-Skills", "yes"); $lC = Get-SklLog
     Test-That "skills yes (both): plugins for claude, skills for codex" { $lC -match 'claude plugin install' -and ([regex]::Matches($lC, 'npx')).Count -eq 3 }
