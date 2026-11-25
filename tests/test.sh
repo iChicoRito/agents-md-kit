@@ -216,8 +216,8 @@ if [ -n "$py" ]; then
   fz="$work/force-new"; mkdir -p "$fz"
   check "force view: writes .graphifyrc when absent" "install --force-view '$fz' && grep -qx 'viz_node_limit=0' '$fz/.graphifyrc'"
   check "force view: no graph is not an error" "grep -q 'no graph yet' '$work/last.log'"
+  check "force view: installs the kit files too" "[ -f '$work/force-new/CLAUDE.md' ] && [ -f '$work/force-new/AGENTS.md' ] && [ -d '$work/force-new/docs' ]"
   check "force view: dry run copies nothing" "rm -rf '$work/force-dry' && mkdir -p '$work/force-dry' && install --force-view --dry-run '$work/force-dry' && [ ! -e '$work/force-dry/tools' ] && [ ! -e '$work/force-dry/.graphifyrc' ]"
-  check "force view: dry run says what would happen" "grep -q 'would copy' '$work/last.log'"
 else
   echo "  skip  graph view tests: no Python 3.8+ found"
 fi

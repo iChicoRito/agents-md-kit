@@ -213,9 +213,9 @@ try {
         $fz = Join-Path $work "force-new"; New-Item -ItemType Directory $fz -Force | Out-Null
         Test-That "force view: writes .graphifyrc when absent" { (Invoke-Install @($fz, "-ForceView")) -and ((Get-Content "$fz\.graphifyrc" -Raw).Trim() -eq "viz_node_limit=0") }
         Test-That "force view: no graph is not an error" { $script:log -match 'no graph yet' }
+        Test-That "force view: installs the kit files too" { (Test-Path "$fz\CLAUDE.md") -and (Test-Path "$fz\AGENTS.md") -and (Test-Path "$fz\docs") }
         $fd = Join-Path $work "force-dry"; New-Item -ItemType Directory $fd -Force | Out-Null
         Test-That "force view: dry run copies nothing" { (Invoke-Install @($fd, "-ForceView", "-DryRun")) -and -not (Test-Path "$fd\tools") -and -not (Test-Path "$fd\.graphifyrc") }
-        Test-That "force view: dry run says what would happen" { $script:log -match 'would copy' }
     } else { "  skip  graph view tests: no Python 3.8+ found" }
 
     "== errors"

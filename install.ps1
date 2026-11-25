@@ -229,70 +229,6 @@ function New-GraphView {
     return ""
 }
 
-# ---------- -ForceView: make the kit's view the only HTML graph in the project ----------
-# Copies the viewer into tools/graph-view/ so the design can be edited, points the project at
-# graph-view.html, and keeps graphify from rendering its own page. Never overwrites.
-if ($ForceView) {
-    try {
-        Write-Host ""
-        if (-not (Find-Python)) { Write-Fail "Python 3.8 or newer is needed for the graph view."; return }
-        if (-not (Get-KitRoot)) { Write-Fail "Could not fetch the kit files."; return }
-        $dest = Join-Path $Target "tools\graph-view"
-        $src = Join-Path $script:kitRoot "tools\graph-view"
-        $files = @("graph_view.py", "refresh.py", "template.html", "vendor\LICENSE",
-                   "vendor\d3-dispatch.min.js", "vendor\d3-quadtree.min.js",
-                   "vendor\d3-timer.min.js", "vendor\d3-force.min.js")
-        $made = 0; $kept = @()
-        if (-not $DryRun) { New-Item -ItemType Directory -Force (Join-Path $dest "vendor") | Out-Null }
-        foreach ($f in $files) {
-            $to = Join-Path $dest $f
-            if (Test-Path $to) { $kept += $f; continue }
-            if (-not $DryRun) { Copy-Item (Join-Path $src $f) $to -Force }
-            $made++
-        }
-        if ($DryRun) {
-            Write-Done "Force view" "would copy" "$(Format-Files $made) to tools/graph-view/"
-        } else {
-            Write-Done "Force view" "copied" "$(Format-Files $made) to tools/graph-view/"
-        }
-        if ($kept.Count -gt 0) { Write-Part "    $ELB kept yours: $($kept -join ', ')" Dim -End }
-        # viz_node_limit=0 keeps graphify's own page out of the project. The kit writes .graphifyrc
-        # only when the project has none, so a project setting is never replaced.
-        $rc = Join-Path $Target ".graphifyrc"
-        if (Test-Path $rc) {
-            $rcText = Get-Content $rc -Raw
-            if ($rcText -match '(?m)^\s*viz_node_limit\s*=') {
-                Write-Part "    $ELB .graphifyrc already sets viz_node_limit; left as it is" Dim -End
-            } else {
-                Write-Part "    ! .graphifyrc exists without viz_node_limit. Add this line to stop graphify's own page:" Yellow -End
-                Write-Part "      viz_node_limit=0" Bold -End
-            }
-        } else {
-            if (-not $DryRun) { Set-Content -Path $rc -Value "viz_node_limit=0" -NoNewline }
-            Write-Part "    $ELB .graphifyrc viz_node_limit=0 (graphify renders no graph.html)" Dim -End
-        }
-        $staleHtml = Join-Path $Target "graphify-out\graph.html"
-        if (Test-Path $staleHtml) {
-            if (-not $DryRun) { Remove-Item $staleHtml -Force }
-            Write-Part "    $ELB removed graphify-out/graph.html: one HTML view, always this design" Dim -End
-        }
-        if (Test-Path (Join-Path $Target "graphify-out\graph.json")) {
-            $nodes = New-GraphView
-            if ($null -ne $nodes) {
-                Write-Done "Graph view" "built" "$(if ($nodes) { "$nodes $SEP " })graphify-out/graph-view.html"
-            } else {
-                Write-Part "    $ELB no view yet: run python tools/graph-view/refresh.py after graphify update ." Dim -End
-            }
-        } else {
-            Write-Part "    $ELB no graph yet. Build one, then refresh the view:" Dim -End
-            Write-Part "      python tools/graph-view/refresh.py" Bold -End
-        }
-        Write-Part "    $ELB the design lives in tools/graph-view/template.html. Rebuild: python tools/graph-view/refresh.py --no-graph" Dim -End
-        Write-Host ""
-    } finally { if ($script:tmp) { Remove-Item -Recurse -Force $script:tmp -ErrorAction SilentlyContinue } }
-    return
-}
-
 # ---------- -GraphView: build the graph view, then stop ----------
 if ($GraphView) {
     try {
@@ -729,6 +665,63 @@ try {
     if (-not $DryRun) { $gfyState = "$(Invoke-GraphifyStep)" }
     $skillsState = ""
     if (-not $DryRun) { $skillsState = "$(Invoke-SkillsStep)" }
+
+    # ---------- -ForceView: make the kit's view the only HTML graph in the project ----------
+    # Runs after the files are copied, so a project gets the full kit and the viewer together.
+    # Copies the viewer into tools/graph-view/ so the design can be edited, writes .graphifyrc so
+    # graphify's hooks render no graph.html, removes graphify's page, and builds the view.
+    # Never overwrites: an existing file or .graphifyrc setting is kept and reported.
+    function Invoke-ForceViewStep {
+        if (-not (Find-Python)) { Write-Part "    ! graph view skipped: Python 3.8+ not found" Yellow -End; return }
+        if (-not (Get-KitRoot)) { Write-Part "    ! graph view skipped: kit files not available" Yellow -End; return }
+        $dest = Join-Path $Target "tools\graph-view"
+        $src = Join-Path $script:kitRoot "tools\graph-view"
+        $files = @("graph_view.py", "refresh.py", "template.html", "vendor\LICENSE",
+                   "vendor\d3-dispatch.min.js", "vendor\d3-quadtree.min.js",
+                   "vendor\d3-timer.min.js", "vendor\d3-force.min.js")
+        $made = 0; $kept = @()
+        New-Item -ItemType Directory -Force (Join-Path $dest "vendor") | Out-Null
+        foreach ($f in $files) {
+            $to = Join-Path $dest $f
+            if (Test-Path $to) { $kept += $f; continue }
+            Copy-Item (Join-Path $src $f) $to -Force
+            $made++
+        }
+        Write-Done "Force view" "copied" "$(Format-Files $made) to tools/graph-view/"
+        if ($kept.Count -gt 0) { Write-Part "    $ELB kept yours: $($kept -join ', ')" Dim -End }
+        $rc = Join-Path $Target ".graphifyrc"
+        if (Test-Path $rc) {
+            $rcText = Get-Content $rc -Raw
+            if ($rcText -match '(?m)^\s*viz_node_limit\s*=') {
+                Write-Part "    $ELB .graphifyrc already sets viz_node_limit; left as it is" Dim -End
+            } else {
+                Write-Part "    ! .graphifyrc exists without viz_node_limit. Add this line to stop graphify's own page:" Yellow -End
+                Write-Part "      viz_node_limit=0" Bold -End
+            }
+        } else {
+            Set-Content -Path $rc -Value "viz_node_limit=0" -NoNewline
+            Write-Part "    $ELB .graphifyrc viz_node_limit=0 (graphify renders no graph.html)" Dim -End
+        }
+        $staleHtml = Join-Path $Target "graphify-out\graph.html"
+        if (Test-Path $staleHtml) {
+            Remove-Item $staleHtml -Force
+            Write-Part "    $ELB removed graphify-out/graph.html: one HTML view, always this design" Dim -End
+        }
+        if (Test-Path (Join-Path $Target "graphify-out\graph.json")) {
+            $nodes = New-GraphView
+            if ($null -ne $nodes) {
+                Write-Done "Graph view" "built" "$(if ($nodes) { "$nodes $SEP " })graphify-out/graph-view.html"
+            } else {
+                Write-Part "    $ELB view not built yet: run python tools/graph-view/refresh.py" Dim -End
+            }
+        } else {
+            Write-Part "    $ELB no graph yet. This project has code but no graphify graph. Build it:" Dim -End
+            Write-Part "      python tools/graph-view/refresh.py" Bold -End
+            Write-Part "    $ELB that reads your code, needs no AI and costs no tokens, then writes graph-view.html" Dim -End
+        }
+        Write-Part "    $ELB the design lives in tools/graph-view/template.html. Rebuild: python tools/graph-view/refresh.py --no-graph" Dim -End
+    }
+    if ($ForceView -and -not $DryRun) { Invoke-ForceViewStep }
 
     # ---------- next steps ----------
     $main = if ($For -eq "agents") { "AGENTS.md" } else { "CLAUDE.md" }

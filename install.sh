@@ -385,58 +385,6 @@ make_view() {
   printf '%s\n' "$out" | sed -n 's/.*(\([0-9]*\) nodes.*/\1 nodes/p'
 }
 
-# ---------- --force-view: make the kit's view the only HTML graph in the project ----------
-# Copies the viewer into tools/graph-view/ so the design can be edited, points the project at
-# graph-view.html, and keeps graphify from rendering its own page. Never overwrites.
-if [ -n "$force_view" ]; then
-  say ""
-  find_python >/dev/null || fail "Python 3.8 or newer is needed for the graph view."
-  dest="$target/tools/graph-view"
-  fetch_kit
-  made=(); kept=()
-  if [ -z "$dry" ]; then mkdir -p "$dest/vendor"; fi
-  for rel in graph_view.py refresh.py template.html vendor/LICENSE \
-             vendor/d3-dispatch.min.js vendor/d3-quadtree.min.js vendor/d3-timer.min.js vendor/d3-force.min.js; do
-    if [ -e "$target/tools/graph-view/$rel" ]; then kept+=("$rel"); continue; fi
-    [ -z "$dry" ] && cp "$kit_root/tools/graph-view/$rel" "$dest/$rel"
-    made+=("$rel")
-  done
-  if [ -n "$dry" ]; then
-    done_line "Force view" "would copy" "$(files ${#made[@]}) to tools/graph-view/"
-  else
-    done_line "Force view" "copied" "$(files ${#made[@]}) to tools/graph-view/"
-  fi
-  [ ${#kept[@]} -gt 0 ] && say "    ${D}${ELB} kept yours: ${kept[*]}${N}"
-  # viz_node_limit=0 keeps graphify's own page out of the project. The kit writes .graphifyrc
-  # only when the project has none, so a project setting is never replaced.
-  rc_target="$target/.graphifyrc"
-  if [ -e "$rc_target" ]; then
-    if grep -qE '^[[:space:]]*viz_node_limit[[:space:]]*=' "$rc_target"; then
-      say "    ${D}${ELB} .graphifyrc already sets viz_node_limit; left as it is${N}"
-    else
-      say "    ${Y}!${N} .graphifyrc exists without viz_node_limit. Add this line to stop graphify's own page:"
-      say "      ${B}viz_node_limit=0${N}"
-    fi
-  else
-    [ -z "$dry" ] && printf 'viz_node_limit=0\n' > "$rc_target"
-    say "    ${D}${ELB} .graphifyrc ${D}viz_node_limit=0${N} ${D}(graphify renders no graph.html)${N}"
-  fi
-  if [ -e "$target/graphify-out/graph.html" ]; then
-    [ -z "$dry" ] && rm -f "$target/graphify-out/graph.html"
-    say "    ${D}${ELB} removed graphify-out/graph.html: one HTML view, always this design${N}"
-  fi
-  if [ -f "$target/graphify-out/graph.json" ]; then
-    nodes="$(make_view 2>&1)" && done_line "Graph view" "built" "${nodes:+$nodes $SEP }graphify-out/graph-view.html" \
-      || say "    ${D}${ELB} no view yet: run python tools/graph-view/refresh.py after graphify update .${N}"
-  else
-    say "    ${D}${ELB} no graph yet. Build one, then refresh the view:${N}"
-    say "      ${B}python tools/graph-view/refresh.py${N}"
-  fi
-  say "    ${D}${ELB} the design lives in tools/graph-view/template.html. Rebuild: python tools/graph-view/refresh.py --no-graph${N}"
-  say ""
-  exit 0
-fi
-
 # ---------- --graph-view: build the graph view, then stop ----------
 if [ -n "$gview" ]; then
   say ""
@@ -788,6 +736,53 @@ skills_step() {
   return 0
 }
 if [ -z "$dry" ]; then skills_step; fi
+
+# ---------- --force-view: make the kit's view the only HTML graph in the project ----------
+# Runs after the files are copied, so a project gets the full kit and the viewer together.
+# Copies the viewer into tools/graph-view/ so the design can be edited, writes .graphifyrc so
+# graphify's hooks render no graph.html, removes graphify's page, and builds the view.
+# Never overwrites: an existing file or .graphifyrc setting is kept and reported.
+force_view_step() {
+  local dest="$target/tools/graph-view" made=() kept=() rel rc_target nodes
+  fetch_kit
+  find_python >/dev/null || { say "    ${Y}!${N} graph view skipped: Python 3.8+ not found"; return 0; }
+  mkdir -p "$dest/vendor"
+  for rel in graph_view.py refresh.py template.html vendor/LICENSE \
+             vendor/d3-dispatch.min.js vendor/d3-quadtree.min.js vendor/d3-timer.min.js vendor/d3-force.min.js; do
+    if [ -e "$dest/$rel" ]; then kept+=("$rel"); continue; fi
+    cp "$kit_root/tools/graph-view/$rel" "$dest/$rel"
+    made+=("$rel")
+  done
+  done_line "Force view" "copied" "$(files ${#made[@]}) to tools/graph-view/"
+  [ ${#kept[@]} -gt 0 ] && say "    ${D}${ELB} kept yours: ${kept[*]}${N}"
+  rc_target="$target/.graphifyrc"
+  if [ -e "$rc_target" ]; then
+    if grep -qE '^[[:space:]]*viz_node_limit[[:space:]]*=' "$rc_target"; then
+      say "    ${D}${ELB} .graphifyrc already sets viz_node_limit; left as it is${N}"
+    else
+      say "    ${Y}!${N} .graphifyrc exists without viz_node_limit. Add this line to stop graphify's own page:"
+      say "      ${B}viz_node_limit=0${N}"
+    fi
+  else
+    printf 'viz_node_limit=0\n' > "$rc_target"
+    say "    ${D}${ELB} .graphifyrc ${D}viz_node_limit=0${N} ${D}(graphify renders no graph.html)${N}"
+  fi
+  if [ -e "$target/graphify-out/graph.html" ]; then
+    rm -f "$target/graphify-out/graph.html"
+    say "    ${D}${ELB} removed graphify-out/graph.html: one HTML view, always this design${N}"
+  fi
+  if [ -f "$target/graphify-out/graph.json" ]; then
+    nodes="$(make_view 2>&1)" && done_line "Graph view" "built" "${nodes:+$nodes $SEP }graphify-out/graph-view.html" \
+      || say "    ${D}${ELB} view not built yet: run python tools/graph-view/refresh.py"
+  else
+    say "    ${D}${ELB} no graph yet. This project has code but no graphify graph. Build it:${N}"
+    say "      ${B}python tools/graph-view/refresh.py${N}"
+    say "    ${D}${ELB} that reads your code, needs no AI and costs no tokens, then writes graph-view.html${N}"
+  fi
+  say "    ${D}${ELB} the design lives in tools/graph-view/template.html. Rebuild: python tools/graph-view/refresh.py --no-graph${N}"
+  say ""
+}
+if [ -n "$force_view" ] && [ -z "$dry" ]; then force_view_step; fi
 
 # ---------- next steps ----------
 say ""
