@@ -16,7 +16,7 @@
 param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$DryRun, [switch]$AddCommand, [string]$ProfilePath = $PROFILE, [switch]$Check, [switch]$GraphView, [switch]$ForceView, [string]$Graphify = "", [string]$Skills = "", [switch]$Help)
 $ErrorActionPreference = 'Stop'
 
-$kitVersion = "1.7.0"   # keep equal to the VERSION file (the tests check this)
+$kitVersion = "1.7.1"   # keep equal to the VERSION file (the tests check this)
 $repo = "https://github.com/iChicoRito/agents-md-kit"
 $archive = "$repo/archive/refs/heads/main.zip"
 

@@ -9,6 +9,11 @@ All notable changes to agents-md-kit. Versions follow [semantic versioning](http
 3. Commit, push, wait for the tests to pass.
 4. Tag and publish: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`.
 
+## 1.7.1 - 2026-11-25
+
+- Fix: `--force-view` / `-ForceView` ran before the file copy and exited, so a project got `tools/graph-view/` and `.graphifyrc` but no `CLAUDE.md`, `AGENTS.md` or `docs/`: a half-installed kit. It now runs after the copy, so the full kit and the viewer land together.
+- The step also says plainly when a project has code but no graph yet, and gives the command that builds it: `python tools/graph-view/refresh.py`.
+
 ## 1.7.0 - 2026-11-25
 
 - New `--force-view` / `-ForceView`: make the kit's view the only HTML graph in the project, and make the design yours to edit. It copies the viewer into `tools/graph-view/` (never overwriting files you already edited), writes `viz_node_limit=0` to `.graphifyrc` so graphify's git hooks stop rendering `graph.html`, removes any existing `graphify-out/graph.html`, and builds the view from your copy.
