@@ -135,9 +135,8 @@ try {
     Test-That "bad -Graphify value fails" { -not (Invoke-Install @($work, "-Graphify", "maybe")) }
 
     "== skills"
-    # Asks first, installs or updates only with a yes. Fake claude and npx.
+    # Asks first, installs or updates only with a yes. Fake npx.
     $sk = Join-Path $work "sk"; New-Item -ItemType Directory $sk | Out-Null
-    [IO.File]::WriteAllText("$sk\claude.cmd", "@echo off`r`necho claude %* >> `"%STUBLOG%`"`r`nif `"%1 %2`"==`"plugin list`" echo   * caveman@caveman`r`n")
     [IO.File]::WriteAllText("$sk\npx.cmd", "@echo off`r`necho npx %* >> `"%STUBLOG%`"`r`n")
     function Invoke-Skl([string]$Name, [string[]]$Options) {
         $dir = Join-Path $work "sk-$Name"; New-Item -ItemType Directory $dir | Out-Null
@@ -148,11 +147,11 @@ try {
     }
     function Get-SklLog { (Get-Content $script:sklLog | Where-Object { $_.Trim() }) -join ";" }
     Invoke-Skl "A" @("-For", "claude", "-Skills", "yes"); $lA = Get-SklLog
-    Test-That "skills yes (claude): missing installed from official repos, installed one updated" { $lA -match 'plugin install superpowers --marketplace obra/superpowers' -and $lA -match 'plugin install ponytail --marketplace DietrichGebert/ponytail' -and $lA -match 'plugin update caveman@caveman' -and $lA -notmatch 'plugin install caveman' -and $lA -notmatch 'npx' }
+    Test-That "skills yes (claude): three official repos, claude-code only" { ([regex]::Matches($lA, 'skills add')).Count -eq 3 -and $lA -match 'add obra/superpowers' -and $lA -match 'add DietrichGebert/ponytail' -and $lA -match 'add JuliusBrussee/caveman' -and $lA -match '--agent claude-code --global' -and $lA -notmatch 'codex' }
     Invoke-Skl "B" @("-For", "agents", "-Skills", "yes"); $lB = Get-SklLog
-    Test-That "skills yes (agents): npx skills add for all three, no claude" { ([regex]::Matches($lB, 'npx --yes skills add')).Count -eq 3 -and $lB -match 'JuliusBrussee/caveman' -and $lB -notmatch 'claude' }
+    Test-That "skills yes (agents): codex only" { ([regex]::Matches($lB, 'skills add')).Count -eq 3 -and $lB -match '--agent codex --global' -and $lB -notmatch 'claude-code' }
     Invoke-Skl "C" @("-For", "both", "-Skills", "yes"); $lC = Get-SklLog
-    Test-That "skills yes (both): claude and npx" { $lC -match 'claude plugin install' -and $lC -match 'npx' }
+    Test-That "skills yes (both): same skills for claude-code and codex" { ([regex]::Matches($lC, '--agent claude-code codex --global')).Count -eq 3 }
     Invoke-Skl "D" @("-For", "both", "-Skills", "no"); $lD = Get-SklLog
     Test-That "skills no: nothing runs" { -not $lD }
     Invoke-Skl "E" @("-For", "both"); $lE = Get-SklLog

@@ -142,35 +142,26 @@ gfy G "$stubs/have" --dry-run --graphify yes
 check "graphify: dry run changes nothing" "[ ! -s '$stubs/log-G' ] && [ ! -e '$work/gfy-G/graphify-out' ]"
 check "bad --graphify value fails" "! install --graphify maybe '$work'"
 
-# primary skills: asks first, installs or updates only with a yes. Fake claude and npx.
+# primary skills: asks first, installs or updates only with a yes. Fake npx.
 echo "== skills"
 sk="$work/sk"; mkdir -p "$sk"
-cat > "$sk/claude" <<'STUB'
-#!/bin/sh
-echo "claude $*" >> "$STUBLOG"
-if [ "$1 $2" = "plugin list" ]; then printf '  â¯ caveman@caveman
-    Version: 2.7.0
-'; fi
-STUB
 cat > "$sk/npx" <<'STUB'
 #!/bin/sh
 echo "npx $*" >> "$STUBLOG"
 STUB
-chmod +x "$sk/claude" "$sk/npx"
-# skl <name> <install.sh options...>: new project, fake tools first in PATH, nobody to ask
+chmod +x "$sk/npx"
+# skl <name> <install.sh options...>: new project, fake npx first in PATH, nobody to ask
 skl() {
   local name="$1"; shift
   mkdir -p "$work/sk-$name"; : > "$sk/log-$name"
   STUBLOG="$sk/log-$name" PATH="$sk:$PATH" bash "$kit/install.sh" --project new --prompt no --graphify no "$@" "$work/sk-$name" </dev/null >"$work/sk-$name.log" 2>&1
 }
 skl A --for claude --skills yes
-check "skills yes (claude): missing installed from official repos" "grep -q 'plugin install superpowers --marketplace obra/superpowers' '$sk/log-A' && grep -q 'plugin install ponytail --marketplace DietrichGebert/ponytail' '$sk/log-A'"
-check "skills yes (claude): installed one is only updated" "grep -q 'plugin update caveman@caveman' '$sk/log-A' && ! grep -q 'plugin install caveman' '$sk/log-A'"
-check "skills yes (claude): no npx" "! grep -q '^npx' '$sk/log-A'"
+check "skills yes (claude): three official repos, claude-code only" "grep -c 'skills add' '$sk/log-A' | grep -qx 3 && grep -q 'add obra/superpowers' '$sk/log-A' && grep -q 'add DietrichGebert/ponytail' '$sk/log-A' && grep -q 'add JuliusBrussee/caveman' '$sk/log-A' && grep -q -- '--agent claude-code --global' '$sk/log-A' && ! grep -q codex '$sk/log-A'"
 skl B --for agents --skills yes
-check "skills yes (agents): npx skills add for all three, no claude" "grep -c 'npx --yes skills add' '$sk/log-B' | grep -qx 3 && grep -q 'JuliusBrussee/caveman' '$sk/log-B' && ! grep -q '^claude' '$sk/log-B'"
+check "skills yes (agents): codex only" "grep -c 'skills add' '$sk/log-B' | grep -qx 3 && grep -q -- '--agent codex --global' '$sk/log-B' && ! grep -q claude-code '$sk/log-B'"
 skl C --for both --skills yes
-check "skills yes (both): claude and npx" "grep -q '^claude plugin install' '$sk/log-C' && grep -q '^npx' '$sk/log-C'"
+check "skills yes (both): same skills for claude-code and codex" "grep -c -- '--agent claude-code codex --global' '$sk/log-C' | grep -qx 3"
 skl D --for both --skills no
 check "skills no: nothing runs" "[ ! -s '$sk/log-D' ] && grep -q 'skipped' '$work/sk-D.log'"
 skl E --for both
