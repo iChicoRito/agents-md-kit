@@ -666,14 +666,15 @@ graphify_step() {
 if [ -z "$dry" ]; then graphify_step; fi
 
 # ---------- primary skills (optional): Superpowers, Ponytail, Caveman from their official repos ----------
-# Asks first (default No). npx skills add fetches the latest version, so it also updates what is already
-# installed. Skills go to your user folder: Claude Code (~/.claude/skills), Codex (~/.agents/skills), or both
-# with the same skills in each.
+# Asks first (default No). Claude Code gets the plugins (they bring the automatic modes): installed with
+# claude plugin install, or only updated when already installed. Codex gets the plain skills (npx skills add,
+# which fetches the latest). A skill that is already in ~/.claude/skills is not installed again as a plugin.
 skills_state=""   # handled: done or declined | empty: nobody was asked
-skill_list=("superpowers|obra/superpowers" "ponytail|DietrichGebert/ponytail" "caveman|JuliusBrussee/caveman")
+# name | plugin id | official repo | a skill the plugin contains (to spot a copy installed the other way)
+skill_list=("superpowers|superpowers@superpowers-dev|obra/superpowers|brainstorming" "ponytail|ponytail@ponytail|DietrichGebert/ponytail|ponytail" "caveman|caveman@caveman|JuliusBrussee/caveman|caveman")
 
 skills_step() {
-  local ans item name repo agents=() ok=0 bad=0
+  local ans item name id repo marker rest installed="" ok=0 bad=0 have_claude="" have_npx=""
   [ -z "$skills_flag" ] && [ -z "$can_ask" ] && return 0   # nobody to ask: the next steps mention it
   if [ "$skills_flag" = no ]; then
     done_line "Skills" "skipped" "install later: see docs/guides/setup.md"; skills_state=handled; return 0
@@ -681,29 +682,50 @@ skills_step() {
   ans="$skills_flag"
   if [ -z "$ans" ]; then
     yesno "Install or update the primary skills (Superpowers, Ponytail, Caveman)?" \
-      "official repos. Skills you already have are updated" "install later: see docs/guides/setup.md"
+      "official repos. Skills you already have are only updated" "install later: see docs/guides/setup.md"
     ans="$answer"
   fi
   skills_state=handled
   if [ "$ans" != yes ]; then
     done_line "Skills" "skipped" "install later: see docs/guides/setup.md"; return 0
   fi
-  if ! command -v npx >/dev/null 2>&1; then
-    done_line "Skills" "skipped" "needs Node.js (npx). See docs/guides/setup.md"; return 0
+  [ "$choice" != agents ] && command -v claude >/dev/null 2>&1 && have_claude=1
+  [ "$choice" != claude ] && command -v npx >/dev/null 2>&1 && have_npx=1
+  [ "$choice" != agents ] && [ -z "$have_claude" ] && done_line "Claude Code" "skipped" "the claude command was not found. See docs/guides/setup.md"
+  [ "$choice" != claude ] && [ -z "$have_npx" ] && done_line "Codex" "skipped" "needs Node.js (npx). See docs/guides/setup.md"
+  bar_done=0; bar_total=0
+  [ -n "$have_claude" ] && bar_total=$((bar_total + ${#skill_list[@]}))
+  [ -n "$have_npx" ] && bar_total=$((bar_total + ${#skill_list[@]}))
+  if [ -n "$have_claude" ]; then
+    installed="$(claude plugin list 2>/dev/null | tr -d '\r' || true)"
+    for item in "${skill_list[@]}"; do
+      name="${item%%|*}"; rest="${item#*|}"; id="${rest%%|*}"; rest="${rest#*|}"; repo="${rest%%|*}"; marker="${rest#*|}"
+      if printf '%s\n' "$installed" | grep -qE "[[:space:]]${id}\$"; then
+        claude plugin marketplace update "${id#*@}" >/dev/null 2>&1 || true
+        if gfy_run "Updating $name" claude plugin update "$id" -y; then done_line "$name" "up to date" "Claude Code plugin"; ok=$((ok + 1))
+        else done_line "$name" "update failed" "run: claude plugin update $id"; bad=$((bad + 1)); fi
+      elif [ -e "$HOME/.claude/skills/$marker" ]; then
+        bar_done=$((bar_done + 1))
+        done_line "$name" "skipped" "already in ~/.claude/skills (installed as skills, not a plugin)"
+      else
+        if gfy_run "Installing $name" claude plugin install "$name" --marketplace "$repo" -y; then done_line "$name" "installed" "Claude Code plugin from $repo"; ok=$((ok + 1))
+        else done_line "$name" "install failed" "run: claude plugin install $name --marketplace $repo"; bad=$((bad + 1)); fi
+      fi
+    done
   fi
-  case "$choice" in claude) agents=(claude-code) ;; agents) agents=(codex) ;; *) agents=(claude-code codex) ;; esac
-  bar_done=0; bar_total=${#skill_list[@]}
-  for item in "${skill_list[@]}"; do
-    name="${item%%|*}"; repo="${item#*|}"
-    if gfy_run "Installing $name" npx --yes skills add "$repo" --skill '*' --agent "${agents[@]}" --global -y; then
-      done_line "$name" "installed or updated" "${agents[*]} $SEP $repo"; ok=$((ok + 1))
-    else
-      done_line "$name" "failed" "run: npx skills add $repo"; bad=$((bad + 1))
-    fi
-  done
+  if [ -n "$have_npx" ]; then
+    for item in "${skill_list[@]}"; do
+      name="${item%%|*}"; rest="${item#*|}"; rest="${rest#*|}"; repo="${rest%%|*}"
+      if gfy_run "Installing $name for Codex" npx --yes skills add "$repo" --skill '*' --agent codex --global -y; then
+        done_line "$name" "installed or updated" "Codex skills $SEP $repo"; ok=$((ok + 1))
+      else
+        done_line "$name" "failed" "run: npx skills add $repo --agent codex"; bad=$((bad + 1))
+      fi
+    done
+  fi
   bar_total=0
   [ "$bad" -gt 0 ] && tail -3 "$gfy_log" | sed "s/^/        ${D}/; s/\$/${N}/"
-  [ "$ok" -gt 0 ] && [ "$choice" != agents ] && say "    ${D}${ELB} restart Claude Code to load the new skills${N}"
+  [ "$ok" -gt 0 ] && [ -n "$have_claude" ] && say "    ${D}${ELB} restart Claude Code to load new or updated plugins${N}"
   return 0
 }
 if [ -z "$dry" ]; then skills_step; fi

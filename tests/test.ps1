@@ -135,23 +135,29 @@ try {
     Test-That "bad -Graphify value fails" { -not (Invoke-Install @($work, "-Graphify", "maybe")) }
 
     "== skills"
-    # Asks first, installs or updates only with a yes. Fake npx.
+    # Asks first, installs or updates only with a yes. Fake claude and npx, empty fake home.
     $sk = Join-Path $work "sk"; New-Item -ItemType Directory $sk | Out-Null
+    [IO.File]::WriteAllText("$sk\claude.cmd", "@echo off`r`necho claude %* >> `"%STUBLOG%`"`r`nif `"%1 %2`"==`"plugin list`" echo   * caveman@caveman`r`n")
     [IO.File]::WriteAllText("$sk\npx.cmd", "@echo off`r`necho npx %* >> `"%STUBLOG%`"`r`n")
-    function Invoke-Skl([string]$Name, [string[]]$Options) {
+    function Invoke-Skl([string]$Name, [string[]]$Options, [string]$FakeHome = "") {
         $dir = Join-Path $work "sk-$Name"; New-Item -ItemType Directory $dir | Out-Null
         $script:sklLog = Join-Path $sk "log-$Name.txt"; Set-Content $script:sklLog ""
+        if (-not $FakeHome) { $FakeHome = Join-Path $work "home-$Name"; New-Item -ItemType Directory $FakeHome | Out-Null }
         $oldPath = $env:PATH; $env:STUBLOG = $script:sklLog; $env:PATH = "$sk;$sysPath"
+        $env:AGENTS_MD_KIT_HOME = $FakeHome
         try { Invoke-Install (@($dir, "-Project", "new", "-Prompt", "no", "-Graphify", "no") + $Options) | Out-Null }
-        finally { $env:PATH = $oldPath; Remove-Item Env:STUBLOG -ErrorAction SilentlyContinue }
+        finally { $env:PATH = $oldPath; Remove-Item Env:AGENTS_MD_KIT_HOME -ErrorAction SilentlyContinue; Remove-Item Env:STUBLOG -ErrorAction SilentlyContinue }
     }
     function Get-SklLog { (Get-Content $script:sklLog | Where-Object { $_.Trim() }) -join ";" }
     Invoke-Skl "A" @("-For", "claude", "-Skills", "yes"); $lA = Get-SklLog
-    Test-That "skills yes (claude): three official repos, claude-code only" { ([regex]::Matches($lA, 'skills add')).Count -eq 3 -and $lA -match 'add obra/superpowers' -and $lA -match 'add DietrichGebert/ponytail' -and $lA -match 'add JuliusBrussee/caveman' -and $lA -match '--agent claude-code --global' -and $lA -notmatch 'codex' }
+    Test-That "skills yes (claude): missing plugins installed, installed one only updated, no npx" { $lA -match 'plugin install superpowers --marketplace obra/superpowers' -and $lA -match 'plugin install ponytail --marketplace DietrichGebert/ponytail' -and $lA -match 'plugin update caveman@caveman' -and $lA -notmatch 'plugin install caveman' -and $lA -notmatch 'npx' }
     Invoke-Skl "B" @("-For", "agents", "-Skills", "yes"); $lB = Get-SklLog
-    Test-That "skills yes (agents): codex only" { ([regex]::Matches($lB, 'skills add')).Count -eq 3 -and $lB -match '--agent codex --global' -and $lB -notmatch 'claude-code' }
+    Test-That "skills yes (agents): npx skills add for all three, codex only, no claude" { ([regex]::Matches($lB, 'skills add')).Count -eq 3 -and $lB -match '--agent codex --global' -and $lB -notmatch 'claude' }
     Invoke-Skl "C" @("-For", "both", "-Skills", "yes"); $lC = Get-SklLog
-    Test-That "skills yes (both): same skills for claude-code and codex" { ([regex]::Matches($lC, '--agent claude-code codex --global')).Count -eq 3 }
+    Test-That "skills yes (both): plugins for claude, skills for codex" { $lC -match 'claude plugin install' -and ([regex]::Matches($lC, 'npx')).Count -eq 3 }
+    $homeH = Join-Path $work "home-H"; New-Item -ItemType Directory "$homeH\.claude\skills\ponytail" -Force | Out-Null
+    Invoke-Skl "H" @("-For", "claude", "-Skills", "yes") $homeH; $lH = Get-SklLog
+    Test-That "skills: a skill already in ~/.claude/skills is not installed as a plugin" { $lH -notmatch 'plugin install ponytail' -and $lH -match 'plugin install superpowers' }
     Invoke-Skl "D" @("-For", "both", "-Skills", "no"); $lD = Get-SklLog
     Test-That "skills no: nothing runs" { -not $lD }
     Invoke-Skl "E" @("-For", "both"); $lE = Get-SklLog

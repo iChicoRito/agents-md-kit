@@ -192,7 +192,7 @@ docs/              architecture, API, database, guides, decisions
 - Skills. See `docs/guides/setup.md` after install:
   - `claude` and `both`: six plugins (Superpowers, Ponytail, Caveman, mattpocock-skills, ux-ui-agent-skills, unslop-ui) install when you open the project in Claude Code. The Caveman skills and design skills are installed by hand with `npx skills add`.
   - `agents`: all skills are installed with `npx skills add`.
-- Optional: the installer can install or update the primary skills (Superpowers, Ponytail, Caveman) from their official repos. It asks first (default No), or use `--skills yes|no`. Needs Node.js. Skills go to your user folder: Claude Code, Codex, or both, matching your choice.
+- Optional: the installer can install or update the primary skills (Superpowers, Ponytail, Caveman) from their official repos. It asks first (default No), or use `--skills yes|no`. Claude Code gets the plugins (needs the `claude` command), Codex gets the plain skills (needs Node.js).
 - Optional: graphify, for a queryable knowledge graph of your code (`uv tool install graphifyy`). Steps in `docs/guides/setup.md`.
 
 ## After install

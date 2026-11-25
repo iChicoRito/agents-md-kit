@@ -519,13 +519,15 @@ function Invoke-GraphifyStep {
 }
 
 # ---------- primary skills (optional): Superpowers, Ponytail, Caveman from their official repos ----------
-# Asks first (default No). npx skills add fetches the latest version, so it also updates what is already
-# installed. Skills go to your user folder: Claude Code (~/.claude/skills), Codex (~/.agents/skills), or both
-# with the same skills in each. Returns "handled" (done or declined) or "" (nobody was asked).
+# Asks first (default No). Claude Code gets the plugins (they bring the automatic modes): installed with
+# claude plugin install, or only updated when already installed. Codex gets the plain skills (npx skills add,
+# which fetches the latest). A skill that is already in ~/.claude/skills is not installed again as a plugin.
+# Returns "handled" (done or declined) or "" (nobody was asked).
+# Marker = a skill the plugin contains, to spot a copy installed the other way.
 $skillList = @(
-    @{ Name = "superpowers"; Repo = "obra/superpowers" },
-    @{ Name = "ponytail"; Repo = "DietrichGebert/ponytail" },
-    @{ Name = "caveman"; Repo = "JuliusBrussee/caveman" }
+    @{ Name = "superpowers"; Id = "superpowers@superpowers-dev"; Repo = "obra/superpowers"; Marker = "brainstorming" },
+    @{ Name = "ponytail"; Id = "ponytail@ponytail"; Repo = "DietrichGebert/ponytail"; Marker = "ponytail" },
+    @{ Name = "caveman"; Id = "caveman@caveman"; Repo = "JuliusBrussee/caveman"; Marker = "caveman" }
 )
 function Invoke-SkillsStep {
     if (-not $Skills -and -not $canAsk) { return "" }   # nobody to ask: the next steps mention it
@@ -533,20 +535,42 @@ function Invoke-SkillsStep {
     if ($Skills -eq "no") { Write-Done "Skills" "skipped" $later; return "handled" }
     $yes = ($Skills -eq "yes")
     if (-not $Skills) {
-        $yes = Read-YesNo "Install or update the primary skills (Superpowers, Ponytail, Caveman)?" "official repos. Skills you already have are updated" $later
+        $yes = Read-YesNo "Install or update the primary skills (Superpowers, Ponytail, Caveman)?" "official repos. Skills you already have are only updated" $later
     }
     if (-not $yes) { Write-Done "Skills" "skipped" $later; return "handled" }
-    if (-not (Get-Command npx -ErrorAction SilentlyContinue)) { Write-Done "Skills" "skipped" "needs Node.js (npx). See docs/guides/setup.md"; return "handled" }
-    $agents = switch ($For) { "claude" { @("claude-code") } "agents" { @("codex") } default { @("claude-code", "codex") } }
+    $haveClaude = ($For -ne "agents") -and [bool](Get-Command claude -ErrorAction SilentlyContinue)
+    $haveNpx = ($For -ne "claude") -and [bool](Get-Command npx -ErrorAction SilentlyContinue)
+    if ($For -ne "agents" -and -not $haveClaude) { Write-Done "Claude Code" "skipped" "the claude command was not found. See docs/guides/setup.md" }
+    if ($For -ne "claude" -and -not $haveNpx) { Write-Done "Codex" "skipped" "needs Node.js (npx). See docs/guides/setup.md" }
     $ok = 0; $last = $null
-    $script:barDone = 0; $script:barTotal = $skillList.Count
-    foreach ($sk in $skillList) {
-        $r = Invoke-Spinner "Installing $($sk.Name)" "npx" (@("--yes", "skills", "add", $sk.Repo, "--skill", "*", "--agent") + $agents + @("--global", "-y")) $Target
-        if ($r.Ok) { Write-Done $sk.Name "installed or updated" "$($agents -join ' ') $SEP $($sk.Repo)"; $ok++ } else { Write-Done $sk.Name "failed" "run: npx skills add $($sk.Repo)"; $last = $r }
+    $script:barDone = 0; $script:barTotal = 0
+    if ($haveClaude) { $script:barTotal += $skillList.Count }
+    if ($haveNpx) { $script:barTotal += $skillList.Count }
+    if ($haveClaude) {
+        $installed = "$(& claude plugin list 2>$null)"
+        foreach ($sk in $skillList) {
+            if ($installed -match "(?m)\s$([regex]::Escape($sk.Id))\s*$") {
+                & claude plugin marketplace update $sk.Id.Split("@")[1] *> $null
+                $r = Invoke-Spinner "Updating $($sk.Name)" "claude" @("plugin", "update", $sk.Id, "-y") $Target
+                if ($r.Ok) { Write-Done $sk.Name "up to date" "Claude Code plugin"; $ok++ } else { Write-Done $sk.Name "update failed" "run: claude plugin update $($sk.Id)"; $last = $r }
+            } elseif (Test-Path (Join-Path $(if ($env:AGENTS_MD_KIT_HOME) { $env:AGENTS_MD_KIT_HOME } else { $HOME }) ".claude\skills\$($sk.Marker)")) {
+                $script:barDone++
+                Write-Done $sk.Name "skipped" "already in ~/.claude/skills (installed as skills, not a plugin)"
+            } else {
+                $r = Invoke-Spinner "Installing $($sk.Name)" "claude" @("plugin", "install", $sk.Name, "--marketplace", $sk.Repo, "-y") $Target
+                if ($r.Ok) { Write-Done $sk.Name "installed" "Claude Code plugin from $($sk.Repo)"; $ok++ } else { Write-Done $sk.Name "install failed" "run: claude plugin install $($sk.Name) --marketplace $($sk.Repo)"; $last = $r }
+            }
+        }
+    }
+    if ($haveNpx) {
+        foreach ($sk in $skillList) {
+            $r = Invoke-Spinner "Installing $($sk.Name) for Codex" "npx" @("--yes", "skills", "add", $sk.Repo, "--skill", "*", "--agent", "codex", "--global", "-y") $Target
+            if ($r.Ok) { Write-Done $sk.Name "installed or updated" "Codex skills $SEP $($sk.Repo)"; $ok++ } else { Write-Done $sk.Name "failed" "run: npx skills add $($sk.Repo) --agent codex"; $last = $r }
+        }
     }
     $script:barTotal = 0
     if ($last) { $last.Out -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 3 | ForEach-Object { Write-Part "        $_" Dim -End } }
-    if ($ok -gt 0 -and $For -ne "agents") { Write-Part "    $ELB restart Claude Code to load the new skills" Dim -End }
+    if ($ok -gt 0 -and $haveClaude) { Write-Part "    $ELB restart Claude Code to load new or updated plugins" Dim -End }
     return "handled"
 }
 

@@ -12,9 +12,8 @@ All notable changes to agents-md-kit. Versions follow [semantic versioning](http
 ## Unreleased
 
 - New installer question: install or update the primary skills (Superpowers, Ponytail, Caveman) from their official repos. Default No. Skip the question with `--skills yes|no` (PowerShell: `-Skills`).
-- Skills install with `npx skills add` from the official repos (`obra/superpowers`, `DietrichGebert/ponytail`, `JuliusBrussee/caveman`), into your user folder. It fetches the latest version, so skills you already have are updated.
-- `claude`: Claude Code (`~/.claude/skills`). `agents`: Codex (`~/.agents/skills`). `both`: the same skills in both.
-- Needs Node.js. Plugin hooks (such as the automatic caveman and ponytail modes) are not installed this way.
+- Claude Code (`claude`, `both`): installs the plugins from the official repos (`obra/superpowers`, `DietrichGebert/ponytail`, `JuliusBrussee/caveman`) with `claude plugin install`, so the automatic modes work. A plugin already installed is only updated. A skill already in `~/.claude/skills` is skipped, to avoid a second copy.
+- Codex (`agents`, `both`): installs the plain skills with `npx skills add --agent codex`. It fetches the latest, so existing skills are updated.
 - Installing graphify, building the graph and installing the skills now show a progress bar, like the file copy. The bar counts steps; the running step moves toward its end but only completes when it really finishes.
 
 ## 1.6.0 - 2026-11-23
