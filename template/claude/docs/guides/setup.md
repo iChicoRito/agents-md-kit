@@ -34,5 +34,5 @@ graphify install                 # adds the graphify skill to your agent
 
 - Build the graph once: `graphify update .` reads your code and needs no AI, so it costs no tokens. To add docs, papers or images, run `/graphify .` in Claude Code, or install the skill for another agent with `graphify install --platform <name>` (for example `codex`).
 - Keep it current: run `graphify update .` after code changes, or `graphify hook install` to do it after every commit.
-- Open `graphify-out/graph.html` in a browser for an interactive map of the code, like Obsidian's graph view. The kit installer builds it after the graph. graphify rewrites that file on each update, so run `agents-md-kit --graph-view` (PowerShell: `agents-md-kit -GraphView`) to bring the view back.
+- Open `graphify-out/graph-view.html` in a browser for an interactive map of the code, like Obsidian's graph view. The kit installer builds it after the graph, and it keeps its own name: graphify owns `graph.html` and rewrites it on each update, so the kit view lives beside it and survives. Rebuild it any time with `agents-md-kit --graph-view` (PowerShell: `agents-md-kit -GraphView`).
 - `graphify-out/` holds the graph, a report and an HTML view. Commit it to share the graph with your team, or add it to `.gitignore` to keep it local.

@@ -95,8 +95,9 @@ try:
     proj = os.path.join(tmp, "my-project", "graphify-out")
     os.makedirs(proj)
     shutil.copy(FIXTURE, os.path.join(proj, "graph.json"))
-    check("default output is graph.html next to graph.json", graph_view.main([os.path.join(proj, "graph.json")]) == 0 and os.path.isfile(os.path.join(proj, "graph.html")))
-    with open(os.path.join(proj, "graph.html"), encoding="utf-8") as f:
+    check("default output is graph-view.html next to graph.json", graph_view.main([os.path.join(proj, "graph.json")]) == 0 and os.path.isfile(os.path.join(proj, "graph-view.html")))
+    check("default output never writes graph.html (graphify owns it)", not os.path.exists(os.path.join(proj, "graph.html")))
+    with open(os.path.join(proj, "graph-view.html"), encoding="utf-8") as f:
         check("title defaults to the project folder", '"__title":"my-project"' in f.read())
 finally:
     shutil.rmtree(tmp, ignore_errors=True)

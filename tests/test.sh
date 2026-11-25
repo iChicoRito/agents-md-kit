@@ -182,7 +182,8 @@ skl F --for both --dry-run --skills yes
 check "skills: dry run changes nothing" "[ ! -s '$sk/log-F' ]"
 check "bad --skills value fails" "! install --skills maybe '$work'"
 
-# graph view: an interactive, Obsidian-style graph.html built from graphify-out/graph.json
+# graph view: an interactive, Obsidian-style graph-view.html built from graphify-out/graph.json
+# It must never be graph.html: graphify owns that name and rewrites it on every update.
 echo "== graph view"
 py=""
 for c in python3 python py; do
@@ -191,9 +192,32 @@ done
 if [ -n "$py" ]; then
   check "graph view: generator tests pass" "'$py' '$kit/tests/test_graph_view.py' > '$work/gv-unit.log' 2>&1 || { tail -15 '$work/gv-unit.log'; false; }"
   d="$work/gview"; mkdir -p "$d/graphify-out"; cp "$kit/tests/fixtures/graph.json" "$d/graphify-out/graph.json"
-  check "graph view: installer builds graph.html" "install --graph-view '$d' && [ -s '$d/graphify-out/graph.html' ] && grep -q 'AuthModule' '$d/graphify-out/graph.html'"
-  check "graph view: dry run writes nothing" "rm '$d/graphify-out/graph.html' && install --graph-view --dry-run '$d' && [ ! -e '$d/graphify-out/graph.html' ]"
+  check "graph view: installer builds graph-view.html" "install --graph-view '$d' && [ -s '$d/graphify-out/graph-view.html' ] && grep -q 'AuthModule' '$d/graphify-out/graph-view.html'"
+  check "graph view: installer leaves graphify's graph.html alone" "[ ! -e '$d/graphify-out/graph.html' ]"
+  check "graph view: a graphify update keeps the custom view" "printf 'graph.html\n' > '$d/graphify-out/graph.html' && install --graph-view '$d' && [ \"\$(cat '$d/graphify-out/graph.html')\" = graph.html ]"
+  check "graph view: dry run writes nothing" "rm '$d/graphify-out/graph-view.html' && install --graph-view --dry-run '$d' && [ ! -e '$d/graphify-out/graph-view.html' ]"
   check "graph view: no graph fails" "mkdir -p '$work/nograph' && ! install --graph-view '$work/nograph'"
+
+  # --force-view: the kit's design becomes the only HTML graph in the project
+  fx="$work/force"; mkdir -p "$fx/graphify-out"
+  cp "$kit/tests/fixtures/graph.json" "$fx/graphify-out/graph.json"
+  printf 'graphify own page\n' > "$fx/graphify-out/graph.html"
+  old_rc="$work/force-rc"; printf 'query_depth=3\n' > "$old_rc"
+  cp "$old_rc" "$fx/.graphifyrc"
+  check "force view: runs without error" "install --force-view '$fx'"
+  check "force view: viewer copied for editing" "[ -f '$fx/tools/graph-view/template.html' ] && [ -f '$fx/tools/graph-view/graph_view.py' ] && [ -f '$fx/tools/graph-view/refresh.py' ]"
+  check "force view: vendor files copied" "[ -f '$fx/tools/graph-view/vendor/d3-force.min.js' ] && [ -f '$fx/tools/graph-view/vendor/LICENSE' ]"
+  check "force view: view built" "[ -s '$fx/graphify-out/graph-view.html' ] && grep -q 'AuthModule' '$fx/graphify-out/graph-view.html'"
+  check "force view: graphify's graph.html removed" "[ ! -e '$fx/graphify-out/graph.html' ]"
+  check "force view: existing .graphifyrc kept" "grep -qx 'query_depth=3' '$fx/.graphifyrc'"
+  check "force view: missing viz_node_limit is reported, not written" "grep -q 'without viz_node_limit' '$work/last.log' && ! grep -q 'viz_node_limit=' '$fx/.graphifyrc'"
+  check "force view: second run keeps edited template" "echo 'MY DESIGN' >> '$fx/tools/graph-view/template.html' && install --force-view '$fx' && grep -q 'MY DESIGN' '$fx/tools/graph-view/template.html'"
+  check "force view: second run reports kept files" "grep -q 'kept yours' '$work/last.log'"
+  fz="$work/force-new"; mkdir -p "$fz"
+  check "force view: writes .graphifyrc when absent" "install --force-view '$fz' && grep -qx 'viz_node_limit=0' '$fz/.graphifyrc'"
+  check "force view: no graph is not an error" "grep -q 'no graph yet' '$work/last.log'"
+  check "force view: dry run copies nothing" "rm -rf '$work/force-dry' && mkdir -p '$work/force-dry' && install --force-view --dry-run '$work/force-dry' && [ ! -e '$work/force-dry/tools' ] && [ ! -e '$work/force-dry/.graphifyrc' ]"
+  check "force view: dry run says what would happen" "grep -q 'would copy' '$work/last.log'"
 else
   echo "  skip  graph view tests: no Python 3.8+ found"
 fi

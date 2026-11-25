@@ -169,7 +169,8 @@ try {
     Test-That "bad -Skills value fails" { -not (Invoke-Install @($work, "-Skills", "maybe")) }
 
     "== graph view"
-    # An interactive, Obsidian-style graph.html built from graphify-out/graph.json
+    # An interactive, Obsidian-style graph-view.html built from graphify-out/graph.json.
+    # It must never be graph.html: graphify owns that name and rewrites it on every update.
     $py = $null
     foreach ($c in "python", "py", "python3") {
         if (-not (Get-Command $c -ErrorAction SilentlyContinue)) { continue }
@@ -185,11 +186,36 @@ try {
         }
         $d = Join-Path $work "gview"; New-Item -ItemType Directory "$d\graphify-out" | Out-Null
         Copy-Item (Join-Path $kit "tests\fixtures\graph.json") "$d\graphify-out\graph.json"
-        Test-That "graph view: installer builds graph.html" { (Invoke-Install @($d, "-GraphView")) -and (Test-Path "$d\graphify-out\graph.html") -and ((Get-Content "$d\graphify-out\graph.html" -Raw) -match 'AuthModule') }
-        Remove-Item "$d\graphify-out\graph.html"
-        Test-That "graph view: dry run writes nothing" { (Invoke-Install @($d, "-GraphView", "-DryRun")) -and -not (Test-Path "$d\graphify-out\graph.html") }
+        Test-That "graph view: installer builds graph-view.html" { (Invoke-Install @($d, "-GraphView")) -and (Test-Path "$d\graphify-out\graph-view.html") -and ((Get-Content "$d\graphify-out\graph-view.html" -Raw) -match 'AuthModule') }
+        Test-That "graph view: installer leaves graphify's graph.html alone" { -not (Test-Path "$d\graphify-out\graph.html") }
+        Set-Content "$d\graphify-out\graph.html" "graphify view"
+        Test-That "graph view: a graphify update keeps the custom view" { (Invoke-Install @($d, "-GraphView")) -and (Get-Content "$d\graphify-out\graph.html" -Raw).Trim() -eq "graphify view" }
+        Remove-Item "$d\graphify-out\graph-view.html"
+        Test-That "graph view: dry run writes nothing" { (Invoke-Install @($d, "-GraphView", "-DryRun")) -and -not (Test-Path "$d\graphify-out\graph-view.html") }
         $ng = Join-Path $work "nograph"; New-Item -ItemType Directory $ng | Out-Null
         Test-That "graph view: no graph fails" { -not (Invoke-Install @($ng, "-GraphView")) }
+
+        # -ForceView: the kit's design becomes the only HTML graph in the project
+        $fx = Join-Path $work "force"; New-Item -ItemType Directory "$fx\graphify-out" -Force | Out-Null
+        Copy-Item (Join-Path $kit "tests\fixtures\graph.json") "$fx\graphify-out\graph.json"
+        Set-Content "$fx\graphify-out\graph.html" "graphify own page"
+        Set-Content "$fx\.graphifyrc" "query_depth=3"
+        Test-That "force view: runs without error" { Invoke-Install @($fx, "-ForceView") }
+        Test-That "force view: viewer copied for editing" { (Test-Path "$fx\tools\graph-view\template.html") -and (Test-Path "$fx\tools\graph-view\graph_view.py") -and (Test-Path "$fx\tools\graph-view\refresh.py") }
+        Test-That "force view: vendor files copied" { (Test-Path "$fx\tools\graph-view\vendor\d3-force.min.js") -and (Test-Path "$fx\tools\graph-view\vendor\LICENSE") }
+        Test-That "force view: view built" { (Test-Path "$fx\graphify-out\graph-view.html") -and ((Get-Content "$fx\graphify-out\graph-view.html" -Raw) -match 'AuthModule') }
+        Test-That "force view: graphify's graph.html removed" { -not (Test-Path "$fx\graphify-out\graph.html") }
+        Test-That "force view: existing .graphifyrc kept" { (Get-Content "$fx\.graphifyrc") -contains "query_depth=3" }
+        Test-That "force view: missing viz_node_limit is reported, not written" { $script:log -match 'without viz_node_limit' -and -not ((Get-Content "$fx\.graphifyrc" -Raw) -match 'viz_node_limit=') }
+        Add-Content "$fx\tools\graph-view\template.html" "MY DESIGN"
+        Test-That "force view: second run keeps edited template" { (Invoke-Install @($fx, "-ForceView")) -and ((Get-Content "$fx\tools\graph-view\template.html" -Raw) -match 'MY DESIGN') }
+        Test-That "force view: second run reports kept files" { $script:log -match 'kept yours' }
+        $fz = Join-Path $work "force-new"; New-Item -ItemType Directory $fz -Force | Out-Null
+        Test-That "force view: writes .graphifyrc when absent" { (Invoke-Install @($fz, "-ForceView")) -and ((Get-Content "$fz\.graphifyrc" -Raw).Trim() -eq "viz_node_limit=0") }
+        Test-That "force view: no graph is not an error" { $script:log -match 'no graph yet' }
+        $fd = Join-Path $work "force-dry"; New-Item -ItemType Directory $fd -Force | Out-Null
+        Test-That "force view: dry run copies nothing" { (Invoke-Install @($fd, "-ForceView", "-DryRun")) -and -not (Test-Path "$fd\tools") -and -not (Test-Path "$fd\.graphifyrc") }
+        Test-That "force view: dry run says what would happen" { $script:log -match 'would copy' }
     } else { "  skip  graph view tests: no Python 3.8+ found" }
 
     "== errors"

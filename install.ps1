@@ -13,10 +13,10 @@
 # so the Unicode symbols are built from code points.
 #   -Update                    project already has the kit: add missing files, and save the
 #                              newer kit version of changed files as <file>.kit-new
-param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$DryRun, [switch]$AddCommand, [string]$ProfilePath = $PROFILE, [switch]$Check, [switch]$GraphView, [string]$Graphify = "", [string]$Skills = "", [switch]$Help)
+param([string]$Target = (Get-Location).Path, [string]$For = "", [string]$Project = "", [string]$Prompt = "", [switch]$Update, [string]$Version = "", [switch]$DryRun, [switch]$AddCommand, [string]$ProfilePath = $PROFILE, [switch]$Check, [switch]$GraphView, [switch]$ForceView, [string]$Graphify = "", [string]$Skills = "", [switch]$Help)
 $ErrorActionPreference = 'Stop'
 
-$kitVersion = "1.6.0"   # keep equal to the VERSION file (the tests check this)
+$kitVersion = "1.7.0"   # keep equal to the VERSION file (the tests check this)
 $repo = "https://github.com/iChicoRito/agents-md-kit"
 $archive = "$repo/archive/refs/heads/main.zip"
 
@@ -105,8 +105,12 @@ if ($Help) {
     Write-Host "    -Check               list the [PLACEHOLDERS] still left in CLAUDE.md, AGENTS.md"
     Write-Host "                         and docs/, then stop"
     Write-Host ""
-    Write-Host "    -GraphView           build the graph view (graphify-out/graph.html, an interactive map of"
+    Write-Host "    -GraphView           build the graph view (graphify-out/graph-view.html, an interactive map of"
     Write-Host "                         your code, like Obsidian's graph) from graphify-out/graph.json, then stop"
+    Write-Host ""
+    Write-Host "    -ForceView           make this view the only HTML graph: copy the viewer into"
+    Write-Host "                         tools/graph-view/ so the design is yours to edit, set"
+    Write-Host "                         viz_node_limit=0 in .graphifyrc, and remove graphify's graph.html"
     Write-Host ""
     Write-Host "    -Graphify yes|no     graphify, the code knowledge graph: yes = install it if missing"
     Write-Host "                         and build the graph without asking, no = skip it (default: ask)"
@@ -210,17 +214,83 @@ function Find-Python {
     return $null
 }
 
-# Writes graphify-out/graph.html (Obsidian-style) from graphify-out/graph.json. Returns "<n> nodes", or $null on failure.
+# Writes graphify-out/graph-view.html (Obsidian-style) from graphify-out/graph.json. Returns "<n> nodes", or $null on failure.
+# graph-view.html, never graph.html: graphify owns graph.html and rewrites it on every update, which would
+# throw this view away. A separate name keeps the custom view across graphify update, hooks and rebuilds.
 function New-GraphView {
     $ErrorActionPreference = "Continue"
     $py = Find-Python
     if (-not $py) { return $null }
     if (-not (Get-KitRoot)) { return $null }
     $gen = Join-Path $script:kitRoot "tools\graph-view\graph_view.py"
-    $out = & $py $gen (Join-Path $Target "graphify-out\graph.json") -o (Join-Path $Target "graphify-out\graph.html") 2>&1 | Out-String
+    $out = & $py $gen (Join-Path $Target "graphify-out\graph.json") -o (Join-Path $Target "graphify-out\graph-view.html") 2>&1 | Out-String
     if ($LASTEXITCODE -ne 0) { return $null }
     if ($out -match '\((\d+) nodes') { return "$($Matches[1]) nodes" }
     return ""
+}
+
+# ---------- -ForceView: make the kit's view the only HTML graph in the project ----------
+# Copies the viewer into tools/graph-view/ so the design can be edited, points the project at
+# graph-view.html, and keeps graphify from rendering its own page. Never overwrites.
+if ($ForceView) {
+    try {
+        Write-Host ""
+        if (-not (Find-Python)) { Write-Fail "Python 3.8 or newer is needed for the graph view."; return }
+        if (-not (Get-KitRoot)) { Write-Fail "Could not fetch the kit files."; return }
+        $dest = Join-Path $Target "tools\graph-view"
+        $src = Join-Path $script:kitRoot "tools\graph-view"
+        $files = @("graph_view.py", "refresh.py", "template.html", "vendor\LICENSE",
+                   "vendor\d3-dispatch.min.js", "vendor\d3-quadtree.min.js",
+                   "vendor\d3-timer.min.js", "vendor\d3-force.min.js")
+        $made = 0; $kept = @()
+        if (-not $DryRun) { New-Item -ItemType Directory -Force (Join-Path $dest "vendor") | Out-Null }
+        foreach ($f in $files) {
+            $to = Join-Path $dest $f
+            if (Test-Path $to) { $kept += $f; continue }
+            if (-not $DryRun) { Copy-Item (Join-Path $src $f) $to -Force }
+            $made++
+        }
+        if ($DryRun) {
+            Write-Done "Force view" "would copy" "$(Format-Files $made) to tools/graph-view/"
+        } else {
+            Write-Done "Force view" "copied" "$(Format-Files $made) to tools/graph-view/"
+        }
+        if ($kept.Count -gt 0) { Write-Part "    $ELB kept yours: $($kept -join ', ')" Dim -End }
+        # viz_node_limit=0 keeps graphify's own page out of the project. The kit writes .graphifyrc
+        # only when the project has none, so a project setting is never replaced.
+        $rc = Join-Path $Target ".graphifyrc"
+        if (Test-Path $rc) {
+            $rcText = Get-Content $rc -Raw
+            if ($rcText -match '(?m)^\s*viz_node_limit\s*=') {
+                Write-Part "    $ELB .graphifyrc already sets viz_node_limit; left as it is" Dim -End
+            } else {
+                Write-Part "    ! .graphifyrc exists without viz_node_limit. Add this line to stop graphify's own page:" Yellow -End
+                Write-Part "      viz_node_limit=0" Bold -End
+            }
+        } else {
+            if (-not $DryRun) { Set-Content -Path $rc -Value "viz_node_limit=0" -NoNewline }
+            Write-Part "    $ELB .graphifyrc viz_node_limit=0 (graphify renders no graph.html)" Dim -End
+        }
+        $staleHtml = Join-Path $Target "graphify-out\graph.html"
+        if (Test-Path $staleHtml) {
+            if (-not $DryRun) { Remove-Item $staleHtml -Force }
+            Write-Part "    $ELB removed graphify-out/graph.html: one HTML view, always this design" Dim -End
+        }
+        if (Test-Path (Join-Path $Target "graphify-out\graph.json")) {
+            $nodes = New-GraphView
+            if ($null -ne $nodes) {
+                Write-Done "Graph view" "built" "$(if ($nodes) { "$nodes $SEP " })graphify-out/graph-view.html"
+            } else {
+                Write-Part "    $ELB no view yet: run python tools/graph-view/refresh.py after graphify update ." Dim -End
+            }
+        } else {
+            Write-Part "    $ELB no graph yet. Build one, then refresh the view:" Dim -End
+            Write-Part "      python tools/graph-view/refresh.py" Bold -End
+        }
+        Write-Part "    $ELB the design lives in tools/graph-view/template.html. Rebuild: python tools/graph-view/refresh.py --no-graph" Dim -End
+        Write-Host ""
+    } finally { if ($script:tmp) { Remove-Item -Recurse -Force $script:tmp -ErrorAction SilentlyContinue } }
+    return
 }
 
 # ---------- -GraphView: build the graph view, then stop ----------
@@ -229,11 +299,11 @@ if ($GraphView) {
         Write-Host ""
         if (-not (Test-Path (Join-Path $Target "graphify-out\graph.json"))) { Write-Fail "No graph found in $Target\graphify-out. Build one first: graphify update ."; return }
         if (-not (Find-Python)) { Write-Fail "Python 3.8 or newer is needed to build the graph view."; return }
-        if ($DryRun) { Write-Done "Graph view" "would be built" "graphify-out/graph.html"; Write-Host ""; return }
+        if ($DryRun) { Write-Done "Graph view" "would be built" "graphify-out/graph-view.html"; Write-Host ""; return }
         $nodes = New-GraphView
         if ($null -eq $nodes) { Write-Fail "Could not build the graph view."; return }
-        Write-Done "Graph view" "built" "$(if ($nodes) { "$nodes $SEP " })graphify-out/graph.html"
-        Write-Part "    $ELB open graphify-out/graph.html in your browser. Run this again after graphify updates the graph." Dim -End
+        Write-Done "Graph view" "built" "$(if ($nodes) { "$nodes $SEP " })graphify-out/graph-view.html"
+        Write-Part "    $ELB open graphify-out/graph-view.html in your browser. graphify keeps graph.html; this view is not touched by updates." Dim -End
         Write-Host ""
     } finally { if ($script:tmp) { Remove-Item -Recurse -Force $script:tmp -ErrorAction SilentlyContinue } }
     return
@@ -508,7 +578,7 @@ function Invoke-GraphifyStep {
         $nodes = if ($r.Out -match 'Rebuilt: ([^\r\n\[]+)') { $Matches[1].Trim() } else { "" }
         Write-Done "Graph" "built" "$(if ($nodes) { "$nodes $SEP " })graphify-out/"
         $view = New-GraphView
-        if ($null -ne $view) { Write-Done "Graph view" "built" "$(if ($view) { "$view $SEP " })open graphify-out/graph.html" }
+        if ($null -ne $view) { Write-Done "Graph view" "built" "$(if ($view) { "$view $SEP " })open graphify-out/graph-view.html" }
         else { Write-Part "    $ELB graph view skipped (needs Python 3.8+). Try later: -GraphView" Dim -End }
         Write-Part "    $ELB commit graphify-out/ to share it, or add it to .gitignore to keep it local" Dim -End
     } else {

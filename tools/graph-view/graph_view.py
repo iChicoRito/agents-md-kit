@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Build an Obsidian-style graph view from a graphify graph.json.
 
-    python graph_view.py                      # graphify-out/graph.json -> graphify-out/graph.html
+    python graph_view.py                      # graphify-out/graph.json -> graphify-out/graph-view.html
     python graph_view.py path/to/graph.json -o view.html --title "My project"
+
+The output file is graph-view.html, never graph.html: graphify owns graph.html and
+rewrites it whenever the graph changes, so a view written there would be lost.
 
 The result is one self-contained HTML file: no network, no build step, open it in any browser.
 Python 3.8+, standard library only.
@@ -68,13 +71,13 @@ def build(graph_path, out_path, title=None):
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Build an Obsidian-style graph view from graphify-out/graph.json")
     ap.add_argument("graph", nargs="?", default=os.path.join("graphify-out", "graph.json"), help="path to graph.json")
-    ap.add_argument("-o", "--out", help="output file (default: graph.html next to graph.json)")
+    ap.add_argument("-o", "--out", help="output file (default: graph-view.html next to graph.json)")
     ap.add_argument("--title", help="name shown in the top bar (default: the project folder)")
     args = ap.parse_args(argv)
     if not os.path.isfile(args.graph):
         print("No graph found at %s. Build one first: graphify update ." % args.graph, file=sys.stderr)
         return 2
-    out = args.out or os.path.join(os.path.dirname(os.path.abspath(args.graph)), "graph.html")
+    out = args.out or os.path.join(os.path.dirname(os.path.abspath(args.graph)), "graph-view.html")
     try:
         n, e = build(args.graph, out, args.title)
     except (OSError, ValueError) as err:

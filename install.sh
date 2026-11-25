@@ -15,7 +15,7 @@
 # Exception: an existing .gitignore is kept and only missing lines are added.
 set -euo pipefail
 
-kit_version="1.6.0"   # keep equal to the VERSION file (the tests check this)
+kit_version="1.7.0"   # keep equal to the VERSION file (the tests check this)
 repo="https://github.com/iChicoRito/agents-md-kit"
 archive="$repo/archive/refs/heads/main.tar.gz"
 
@@ -81,8 +81,12 @@ usage() {
     --check               list the [PLACEHOLDERS] still left in CLAUDE.md, AGENTS.md
                           and docs/, then stop (exit code 1 when some are left)
 
-    --graph-view          build the graph view (graphify-out/graph.html, an interactive map of your
+    --graph-view          build the graph view (graphify-out/graph-view.html, an interactive map of your
                           code, like Obsidian's graph) from graphify-out/graph.json, then stop
+
+    --force-view          make this view the only HTML graph: copy the viewer into
+                          tools/graph-view/ so the design is yours to edit, set
+                          viz_node_limit=0 in .graphifyrc, and remove graphify's graph.html
 
     --graphify yes|no     graphify, the code knowledge graph: yes = install it if missing and
                           build the graph without asking, no = skip it (default: ask)
@@ -97,7 +101,7 @@ EOF
 }
 
 # ---------- arguments ----------
-choice=""; project=""; prompt=""; update=""; want_version=""; dry=""; add_cmd=""; check=""; gview=""; gfy_flag=""; skills_flag=""; gfy_log=""; target="$PWD"
+choice=""; project=""; prompt=""; update=""; want_version=""; dry=""; add_cmd=""; check=""; gview=""; force_view=""; gfy_flag=""; skills_flag=""; gfy_log=""; target="$PWD"
 need_value() { [ "$2" -ge 2 ] || fail "$1 needs a value (see --help)"; }
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -115,6 +119,7 @@ while [ $# -gt 0 ]; do
     --add-command) add_cmd=1; shift ;;
     --check) check=1; shift ;;
     --graph-view) gview=1; shift ;;
+    --force-view) force_view=1; shift ;;
     --graphify) need_value "$1" $#; gfy_flag="$2"; shift 2 ;;
     --graphify=*) gfy_flag="${1#--graphify=}"; shift ;;
     --skills) need_value "$1" $#; skills_flag="$2"; shift 2 ;;
@@ -369,14 +374,68 @@ find_python() {
   return 1
 }
 
-# make_view: writes graphify-out/graph.html (Obsidian-style) from graphify-out/graph.json. Prints "<nodes> nodes".
+# make_view: writes graphify-out/graph-view.html (Obsidian-style) from graphify-out/graph.json. Prints "<nodes> nodes".
+# graph-view.html, never graph.html: graphify owns graph.html and rewrites it on every update, which would
+# throw this view away. A separate name keeps the custom view across graphify update, hooks and rebuilds.
 make_view() {
   local py out
   py="$(find_python)" || return 1
   fetch_kit
-  out="$("$py" "$kit_root/tools/graph-view/graph_view.py" "$target/graphify-out/graph.json" -o "$target/graphify-out/graph.html" 2>&1)" || { printf '%s\n' "$out" >&2; return 1; }
+  out="$("$py" "$kit_root/tools/graph-view/graph_view.py" "$target/graphify-out/graph.json" -o "$target/graphify-out/graph-view.html" 2>&1)" || { printf '%s\n' "$out" >&2; return 1; }
   printf '%s\n' "$out" | sed -n 's/.*(\([0-9]*\) nodes.*/\1 nodes/p'
 }
+
+# ---------- --force-view: make the kit's view the only HTML graph in the project ----------
+# Copies the viewer into tools/graph-view/ so the design can be edited, points the project at
+# graph-view.html, and keeps graphify from rendering its own page. Never overwrites.
+if [ -n "$force_view" ]; then
+  say ""
+  find_python >/dev/null || fail "Python 3.8 or newer is needed for the graph view."
+  dest="$target/tools/graph-view"
+  fetch_kit
+  made=(); kept=()
+  if [ -z "$dry" ]; then mkdir -p "$dest/vendor"; fi
+  for rel in graph_view.py refresh.py template.html vendor/LICENSE \
+             vendor/d3-dispatch.min.js vendor/d3-quadtree.min.js vendor/d3-timer.min.js vendor/d3-force.min.js; do
+    if [ -e "$target/tools/graph-view/$rel" ]; then kept+=("$rel"); continue; fi
+    [ -z "$dry" ] && cp "$kit_root/tools/graph-view/$rel" "$dest/$rel"
+    made+=("$rel")
+  done
+  if [ -n "$dry" ]; then
+    done_line "Force view" "would copy" "$(files ${#made[@]}) to tools/graph-view/"
+  else
+    done_line "Force view" "copied" "$(files ${#made[@]}) to tools/graph-view/"
+  fi
+  [ ${#kept[@]} -gt 0 ] && say "    ${D}${ELB} kept yours: ${kept[*]}${N}"
+  # viz_node_limit=0 keeps graphify's own page out of the project. The kit writes .graphifyrc
+  # only when the project has none, so a project setting is never replaced.
+  rc_target="$target/.graphifyrc"
+  if [ -e "$rc_target" ]; then
+    if grep -qE '^[[:space:]]*viz_node_limit[[:space:]]*=' "$rc_target"; then
+      say "    ${D}${ELB} .graphifyrc already sets viz_node_limit; left as it is${N}"
+    else
+      say "    ${Y}!${N} .graphifyrc exists without viz_node_limit. Add this line to stop graphify's own page:"
+      say "      ${B}viz_node_limit=0${N}"
+    fi
+  else
+    [ -z "$dry" ] && printf 'viz_node_limit=0\n' > "$rc_target"
+    say "    ${D}${ELB} .graphifyrc ${D}viz_node_limit=0${N} ${D}(graphify renders no graph.html)${N}"
+  fi
+  if [ -e "$target/graphify-out/graph.html" ]; then
+    [ -z "$dry" ] && rm -f "$target/graphify-out/graph.html"
+    say "    ${D}${ELB} removed graphify-out/graph.html: one HTML view, always this design${N}"
+  fi
+  if [ -f "$target/graphify-out/graph.json" ]; then
+    nodes="$(make_view 2>&1)" && done_line "Graph view" "built" "${nodes:+$nodes $SEP }graphify-out/graph-view.html" \
+      || say "    ${D}${ELB} no view yet: run python tools/graph-view/refresh.py after graphify update .${N}"
+  else
+    say "    ${D}${ELB} no graph yet. Build one, then refresh the view:${N}"
+    say "      ${B}python tools/graph-view/refresh.py${N}"
+  fi
+  say "    ${D}${ELB} the design lives in tools/graph-view/template.html. Rebuild: python tools/graph-view/refresh.py --no-graph${N}"
+  say ""
+  exit 0
+fi
 
 # ---------- --graph-view: build the graph view, then stop ----------
 if [ -n "$gview" ]; then
@@ -384,12 +443,12 @@ if [ -n "$gview" ]; then
   [ -f "$target/graphify-out/graph.json" ] || fail "No graph found in $target/graphify-out. Build one first: graphify update ."
   find_python >/dev/null || fail "Python 3.8 or newer is needed to build the graph view."
   if [ -n "$dry" ]; then
-    done_line "Graph view" "would be built" "graphify-out/graph.html"; say ""; exit 0
+    done_line "Graph view" "would be built" "graphify-out/graph-view.html"; say ""; exit 0
   fi
   fetch_kit   # outside the $( ) below, so the download spinner shows and the result is kept
   nodes="$(make_view 2>&1)" || fail "Could not build the graph view. ${nodes:-}"
-  done_line "Graph view" "built" "${nodes:+$nodes $SEP }graphify-out/graph.html"
-  say "    ${D}${ELB} open graphify-out/graph.html in your browser. Run this again after graphify updates the graph.${N}"
+  done_line "Graph view" "built" "${nodes:+$nodes $SEP }graphify-out/graph-view.html"
+  say "    ${D}${ELB} open graphify-out/graph-view.html in your browser. graphify keeps graph.html; this view is not touched by updates.${N}"
   say ""
   exit 0
 fi
@@ -652,7 +711,7 @@ graphify_step() {
     nodes="$(grep -o 'Rebuilt: [^[]*' "$gfy_log" | tail -1 | sed 's/^Rebuilt: //' || true)"
     done_line "Graph" "built" "${nodes:+$nodes $SEP }graphify-out/"
     if nodes="$(make_view 2>/dev/null)"; then
-      done_line "Graph view" "built" "${nodes:+$nodes $SEP }open graphify-out/graph.html"
+      done_line "Graph view" "built" "${nodes:+$nodes $SEP }open graphify-out/graph-view.html"
     else
       say "    ${D}${ELB} graph view skipped (needs Python 3.8+). Try later: --graph-view${N}"
     fi
