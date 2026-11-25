@@ -6,8 +6,12 @@
 
 graphify runs with GRAPHIFY_VIZ_NODE_LIMIT=0, so it does not render its own
 graph.html. That leaves exactly one HTML view in the project, and that view is
-built from template.html. Nothing left in the pipeline can put the default
-design back: not `graphify update .`, not its git hooks, not a full rebuild.
+built from template.html.
+
+Three graphify commands write graph.html: `update`, `cluster-only` and `label`.
+Only `cluster-only` and `label` accept --no-viz, and only `label` reads the
+environment variable. This script covers all of them by removing the file after
+every run, so the default design cannot come back from here.
 
 An existing graph.html is removed for the same reason: a second page with the
 default look invites opening the wrong one.
@@ -25,14 +29,18 @@ VIEW = os.path.join(OUT, "graph-view.html")
 DEFAULT_HTML = os.path.join(OUT, "graph.html")
 
 
-def update_graph() -> None:
+def run_graphify(args) -> int:
     exe = shutil.which("graphify")
     if not exe:
         print("graphify not found on PATH; skipping the graph update.", file=sys.stderr)
-        return
+        return 1
     env = dict(os.environ, GRAPHIFY_VIZ_NODE_LIMIT="0")
-    print("Updating the code graph (graphify, no HTML)...")
-    subprocess.run([exe, "update", "."], cwd=ROOT, env=env)
+    print("Running graphify %s (no HTML)..." % " ".join(args))
+    return subprocess.run([exe] + list(args), cwd=ROOT, env=env).returncode
+
+
+def update_graph() -> None:
+    run_graphify(["update", "."])
 
 
 def build_view() -> int:
@@ -41,18 +49,23 @@ def build_view() -> int:
     return subprocess.run([sys.executable, gen, GRAPH, "-o", VIEW], cwd=ROOT).returncode
 
 
+def drop_default_html() -> None:
+    if os.path.exists(DEFAULT_HTML):
+        os.remove(DEFAULT_HTML)
+        print("Removed graphify's graph.html: one view only, always this design.")
+
+
 def main(argv) -> int:
     if "--help" in argv or "-h" in argv:
         print(__doc__.strip())
         return 0
     if "--no-graph" not in argv:
         update_graph()
+    drop_default_html()
     code = build_view()
     if code != 0:
         return code
-    if os.path.exists(DEFAULT_HTML):
-        os.remove(DEFAULT_HTML)
-        print("Removed graphify's graph.html: one view only, always this design.")
+    drop_default_html()
     return 0
 
 
