@@ -9,9 +9,15 @@ graph.html. That leaves exactly one HTML view in the project, and that view is
 built from template.html.
 
 Three graphify commands write graph.html: `update`, `cluster-only` and `label`.
-Only `cluster-only` and `label` accept --no-viz, and only `label` reads the
-environment variable. This script covers all of them by removing the file after
-every run, so the default design cannot come back from here.
+The environment variable is honored by `update` and `cluster-only`; `export html`
+ignores it and needs --no-viz. Measured, not assumed:
+
+    GRAPHIFY_VIZ_NODE_LIMIT=0 graphify update .        -> no graph.html
+    GRAPHIFY_VIZ_NODE_LIMIT=0 graphify cluster-only .  -> no graph.html
+    GRAPHIFY_VIZ_NODE_LIMIT=0 graphify export html     -> graph.html written
+
+This script removes the file after every run anyway, so a command that ignores
+the switch cannot leave the default page beside the custom view.
 
 An existing graph.html is removed for the same reason: a second page with the
 default look invites opening the wrong one.
