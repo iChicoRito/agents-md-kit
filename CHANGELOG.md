@@ -9,16 +9,16 @@ All notable changes to agents-md-kit. Versions follow [semantic versioning](http
 3. Commit, push, wait for the tests to pass.
 4. Tag and publish: `gh release create vX.Y.Z --title vX.Y.Z --notes-file <notes>`.
 
-## 2.0.0 - 2026-11-26
+## 2.1.0 - 2026-11-26
 
-- **graphify support removed.** The kit no longer mentions, installs, configures or builds anything for graphify. The installer never asks about it, never runs `graphify`, and never writes a graph view. Projects that want a code graph install graphify themselves.
-- Removed: the `--graphify` / `-Graphify` option, the graphify step at the end of the install, the `graphify.md` rule (all three templates), the "Graphify (optional)" section in `docs/guides/setup.md`, and the graphify rows in the skills tables.
-- Removed: the graph view (`--graph-view` / `-GraphView`, `--force-view` / `-ForceView`), `tools/graph-view/`, and its tests. A graph viewer belongs with the graph tool, not with the instruction kit.
-- Unchanged and still true: the kit copies an instruction file, rules, and docs. Nothing else.
-- New installer question: install or update the primary skills (Superpowers, Ponytail, Caveman) from their official repos. Default No. Skip the question with `--skills yes|no` (PowerShell: `-Skills`).
-- Claude Code (`claude`, `both`): installs the plugins from the official repos (`obra/superpowers`, `DietrichGebert/ponytail`, `JuliusBrussee/caveman`) with `claude plugin install`, so the automatic modes work. A plugin already installed is only updated. A skill already in `~/.claude/skills` is skipped, to avoid a second copy.
-- Codex (`agents`, `both`): installs the plain skills with `npx skills add --agent codex`. It fetches the latest, so existing skills are updated.
-- Installing the skills now shows a progress bar, like the file copy. The bar counts steps; the running step moves toward its end but only completes when it really finishes.
+- **graphify is back as an optional step, with its own default view.** It asks first (default No), can install the official package (`uv tool install graphifyy`), and can build the graph (`graphify update .`, code only, no AI). Skip the questions with `--graphify yes|no` (PowerShell: `-Graphify yes` / `-Graphify no`).
+- `graphify-out/graph.html` is graphify's own page and stays that way. The kit does not render, replace or restyle it. The custom viewer stays removed: no `--graph-view`, no `--force-view`, no `tools/graph-view/`.
+- `graphify.md` is back in all three templates, so the AI asks the graph before reading files when `graphify-out/graph.json` exists.
+
+## 2.0.0 - 2026-11-25
+
+- The custom graph view was removed: `--graph-view` / `-GraphView`, `--force-view` / `-ForceView`, `tools/graph-view/` (viewer, generator, refresh script, vendored d3) and its tests. It wrote into `graphify-out/graph.html`, the file graphify owns and rewrites, so the view was silently replaced on every update. That whole class of bug is gone with it.
+- graphify support was removed at the same time and then partly restored in the next release. See below.
 
 ## 1.7.1 - 2026-11-25
 

@@ -34,6 +34,7 @@ for v in claude agents both; do
   check "new: every kit file is there" "has_all $v '$d' no"
   check "new: no PROMPT.md" "[ ! -e '$d/PROMPT.md' ]"
   rules_dir=.claude/rules; [ $v = agents ] && rules_dir=.agents/rules
+  check "new: graphify rule installed" "[ -e '$d/$rules_dir/graphify.md' ]"
   check "new: every rule file is listed in $main" "for r in '$d/$rules_dir'/*.md; do grep -qF \"$rules_dir/\$(basename \"\$r\")\" '$d/$main' || { echo \"       not listed: \$r\"; exit 1; }; done"
   check "new: no kit marker file added" "[ ! -e '$d/.agents-md-kit' ]"
   [ $v = claude ] && check "new: no .agents folder" "[ ! -e '$d/.agents' ]"
@@ -98,6 +99,51 @@ printf 'See [API](api/README.md).\n' >> "$d/docs/README.md"
 check "check: all filled, links ignored (exit 0)" "install --check '$d' && grep -q 'no placeholders left' '$work/last.log'"
 check "check: empty folder fails" "mkdir -p '$work/empty' && ! install --check '$work/empty'"
 
+
+# graphify: asks first, installs or builds only with a yes. Fake tools, nothing real is installed.
+echo "== graphify"
+stubs="$work/stubs"; mkdir -p "$stubs/have" "$stubs/inst"
+cat > "$stubs/graphify.tpl" <<'STUB'
+#!/bin/sh
+echo "graphify $*" >> "$STUBLOG"
+mkdir -p graphify-out && echo '{}' > graphify-out/graph.json
+echo "[graphify watch] Rebuilt: 7 nodes, 9 edges, 2 communities"
+STUB
+cp "$stubs/graphify.tpl" "$stubs/have/graphify"; chmod +x "$stubs/have/graphify"
+cat > "$stubs/inst/uv" <<'STUB'
+#!/bin/sh
+echo "uv $*" >> "$STUBLOG"
+if [ "$1 $2" = "tool install" ]; then cp "$(dirname "$0")/../graphify.tpl" "$(dirname "$0")/graphify"; chmod +x "$(dirname "$0")/graphify"; fi
+STUB
+chmod +x "$stubs/inst/uv"
+# PATH without any real graphify, so "not installed" really means not installed
+clean_path=""
+IFS=: read -r -a path_parts <<< "$PATH"
+for p in "${path_parts[@]}"; do
+  if [ ! -x "$p/graphify" ] && [ ! -x "$p/graphify.exe" ]; then clean_path="${clean_path:+$clean_path:}$p"; fi
+done
+# gfy <name> <fake tools folder> <install.sh options...>: new project, fake tools first in PATH, nobody to ask
+gfy() {
+  local name="$1" pp="$2"; shift 2
+  gdir="$work/gfy-$name"; mkdir -p "$gdir"; : > "$stubs/log-$name"; rm -f "$stubs/inst/graphify"
+  STUBLOG="$stubs/log-$name" PATH="$pp:$clean_path" bash "$kit/install.sh" --for claude --project new --prompt no "$@" "$gdir" </dev/null >"$work/gfy-$name.log" 2>&1
+}
+gfy A "$stubs/have" --graphify yes
+check "graphify yes (installed): graph built" "[ -f '$work/gfy-A/graphify-out/graph.json' ] && grep -q 'graphify update .' '$stubs/log-A' && grep -q 'built' '$work/gfy-A.log'"
+gfy B "$stubs/inst" --graphify yes
+check "graphify yes (missing): installs, then builds" "grep -q 'uv tool install graphifyy' '$stubs/log-B' && grep -q 'graphify update .' '$stubs/log-B' && [ -f '$work/gfy-B/graphify-out/graph.json' ]"
+gfy C "$stubs/have" --graphify no
+check "graphify no: nothing runs" "[ ! -s '$stubs/log-C' ] && [ ! -e '$work/gfy-C/graphify-out' ] && grep -q 'skipped' '$work/gfy-C.log'"
+gfy D "$stubs/have"
+check "graphify (nobody to ask): nothing runs, tip shown" "[ ! -s '$stubs/log-D' ] && [ ! -e '$work/gfy-D/graphify-out' ] && grep -q 'Optional: build a code graph' '$work/gfy-D.log'"
+mkdir -p "$work/gfy-E/graphify-out"; echo '{}' > "$work/gfy-E/graphify-out/graph.json"
+gfy E "$stubs/have" --graphify yes
+check "graphify: existing graph is left alone" "[ ! -s '$stubs/log-E' ] && grep -q 'graph found' '$work/gfy-E.log'"
+gfy G "$stubs/have" --dry-run --graphify yes
+check "graphify: dry run changes nothing" "[ ! -s '$stubs/log-G' ] && [ ! -e '$work/gfy-G/graphify-out' ]"
+check "bad --graphify value fails" "! install --graphify maybe '$work'"
+
+# graph view: an interactive, Obsidian-style graph.html built from graphify-out/graph.json
 
 # Bad input is refused
 echo "== errors"

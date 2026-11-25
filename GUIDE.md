@@ -64,6 +64,7 @@ Seven short rule files. Claude Code reads all of them every session. `CLAUDE.md`
 | `git.md` | Never commit unless you ask. No AI names in commit messages. |
 | `check-work.md` | Check the work before finishing. Say clearly what was not checked. |
 | `plain-language.md` | Use simple words and short explanations. |
+| `graphify.md` | If the project has a graphify knowledge graph, ask the graph first instead of reading many files. Does nothing until a graph exists. The installer asks first, with No as the default, before it installs graphify or builds a graph. |
 
 **`.claude/skills/`: project skills for Claude Code only**
 It starts empty, with only a `.gitkeep` (an empty file that makes git keep the folder). Claude Code loads skills here automatically. Other agents do not see them. Use it for a skill only Claude needs.

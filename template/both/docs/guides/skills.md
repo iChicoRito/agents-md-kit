@@ -37,6 +37,7 @@ Plugins listed in `.claude/settings.json` (Superpowers, Ponytail, Caveman, mattp
 | Ask for a review after a task or before merging | `superpowers:requesting-code-review` |
 | Respond to review feedback | `superpowers:receiving-code-review` |
 | Review a change: logic, safety, load, tests, needless lines | `ponytail:ponytail-review` |
+| Question about how the code works or how parts connect (needs a graph, see `graphify.md`) | `graphify` |
 | Short review, one line per finding | `caveman-review` |
 | Audit the whole repo: bugs, security, bloat | `ponytail:ponytail-audit` |
 | List every `shortcut:` comment (technical debt) | `ponytail:ponytail-debt` |

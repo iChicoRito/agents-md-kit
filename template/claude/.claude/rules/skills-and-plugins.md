@@ -17,6 +17,7 @@
 | Before saying work is done or fixed | `superpowers:verification-before-completion` |
 | Any coding task: smallest change that fully solves it | `ponytail:ponytail` |
 | Review a change | `ponytail:ponytail-review` |
+| Question about how the code works or how parts connect (needs a graph, see `graphify.md`) | `graphify` |
 | Design, redesign, or polish any UI | `impeccable` |
 | UI choices: style, color, fonts, layout | `ui-ux-pro-max` |
 | Commit message (only when the user asks to commit) | `caveman-commit` |

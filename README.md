@@ -9,6 +9,7 @@ A small, scalable instruction setup for AI coding agents. One command adds it to
 - One main instruction file, kept under 200 lines.
 - Working rules, one topic per file.
 - `docs/` for architecture, API, database and guides. Agents open these only when a task needs them.
+- Optional [graphify](https://pypi.org/project/graphifyy/): when the project has a knowledge graph, the AI queries it instead of reading the whole codebase. The installer offers to install it and build the graph, and never does either without a yes.
 
 New here? Read the **[guide](GUIDE.md)**: what every file does, and how to use the kit on a new or existing project.
 
@@ -179,6 +180,7 @@ docs/              architecture, API, database, guides, decisions
   - `claude` and `both`: six plugins (Superpowers, Ponytail, Caveman, mattpocock-skills, ux-ui-agent-skills, unslop-ui) install when you open the project in Claude Code. The Caveman skills and design skills are installed by hand with `npx skills add`.
   - `agents`: all skills are installed with `npx skills add`.
 - Optional: the installer can install or update the primary skills (Superpowers, Ponytail, Caveman) from their official repos. It asks first (default No), or use `--skills yes|no`. Claude Code gets the plugins (needs the `claude` command), Codex gets the plain skills (needs Node.js).
+- Optional: graphify, for a queryable knowledge graph of your code. The installer offers to install the official package (`uv tool install graphifyy`) and to build the graph. It asks first (default No), or use `--graphify yes|no`. Nothing is installed or built without a yes. graphify writes `graphify-out/graph.json`, its report and its own `graphify-out/graph.html`; the kit does not restyle or replace that page.
 
 ## After install
 
@@ -212,6 +214,7 @@ Bash (Mac, Linux, Git Bash) uses `--option`. PowerShell uses `-Option`. **Option
 | Preview only, change nothing | `--dry-run` | `-DryRun` |
 | Add the short command `agents-md-kit` | `--add-command` | `-AddCommand` |
 | List the `[PLACEHOLDERS]` still left | `--check` | `-Check` |
+| graphify without being asked: install if missing and build the graph, or skip it | `--graphify yes` / `--graphify no` | `-Graphify yes` / `-Graphify no` |
 | Show help | `--help` | `-Help` |
 | Typed answers instead of arrow keys | `AGENTS_MD_KIT_UI=plain` before `bash` | `$env:AGENTS_MD_KIT_UI = "plain"` first |
 | No colors | `NO_COLOR=1` before `bash` | `$env:NO_COLOR = "1"` first |
@@ -269,6 +272,7 @@ Open a new terminal after adding it, then:
 | Install into another folder | `agents-md-kit --for both "path/to/project"` | `agents-md-kit -For both "C:\path\to\project"` |
 | Preview only, change nothing | `agents-md-kit --dry-run` | `agents-md-kit -DryRun` |
 | List the placeholders still left | `agents-md-kit --check` | `agents-md-kit -Check` |
+| Install graphify and build the graph without asking | `agents-md-kit --graphify yes` | `agents-md-kit -Graphify yes` |
 | Show help | `agents-md-kit --help` | `agents-md-kit -Help` |
 
 ## Contributing

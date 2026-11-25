@@ -35,6 +35,7 @@ The full list. The main rows are also in `.agents/rules/skills.md`, which loads 
 | Ask for a review after a task or before merging | `requesting-code-review` |
 | Respond to review feedback | `receiving-code-review` |
 | Review a change: logic, safety, load, tests, needless lines | `ponytail-review` |
+| Question about how the code works or how parts connect (needs a graph, see `graphify.md`) | `graphify` |
 | Short review, one line per finding | `caveman-review` |
 | Audit the whole repo: bugs, security, bloat | `ponytail-audit` |
 | List every `shortcut:` comment (technical debt) | `ponytail-debt` |
