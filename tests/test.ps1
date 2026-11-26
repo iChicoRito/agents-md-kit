@@ -142,6 +142,34 @@ try {
 
     "== skills"
     Test-That "bad -Skills value fails" { -not (Invoke-Install @($work, "-Skills", "maybe")) }
+    $caveman = Join-Path $work "caveman"
+    $existingHooks = Join-Path $work "existing-hooks"
+    $noCaveman = Join-Path $work "no-caveman"
+    New-Item -ItemType Directory $caveman, "$existingHooks\.codex", $noCaveman | Out-Null
+    $hookFile = "$caveman\.codex\hooks.json"
+    $existingFile = "$existingHooks\.codex\hooks.json"
+    $original = '{"hooks":{"SessionStart":[{"matcher":"resume","hooks":[{"type":"command","command":"echo existing"}]}]}}'
+    [IO.File]::WriteAllText($existingFile, $original)
+    [IO.File]::WriteAllText("$stubs\have\npx.cmd", "@exit /b 0`r`n")
+    $oldPath = $env:PATH
+    try {
+        $env:PATH = "$stubs\have;$oldPath"
+        $argsYes = @("-For", "agents", "-Project", "new", "-Skills", "yes", "-Graphify", "no")
+        Test-That "skills yes: adds Caveman startup once" {
+            (Invoke-Install (@($caveman) + $argsYes)) -and (Invoke-Install (@($caveman) + $argsYes)) -and
+                (@((Get-Content $hookFile) -match 'Starting Caveman mode').Count -eq 1) -and
+                -not (Test-Path "$hookFile.kit-new")
+        }
+        Test-That "skills yes: proposes a merge when a hooks file exists" {
+            (Invoke-Install (@($existingHooks) + $argsYes)) -and
+                ([IO.File]::ReadAllText($existingFile) -ceq $original) -and
+                ([IO.File]::ReadAllText("$existingFile.kit-new") -ceq [IO.File]::ReadAllText($hookFile))
+        }
+        Test-That "skills no: skips the Caveman hook" {
+            (Invoke-Install @($noCaveman, "-For", "agents", "-Project", "new", "-Skills", "no", "-Graphify", "no")) -and
+                -not (Test-Path "$noCaveman\.codex\hooks.json")
+        }
+    } finally { $env:PATH = $oldPath }
 
 
     "== errors"

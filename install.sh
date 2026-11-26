@@ -626,7 +626,7 @@ skills_state=""   # handled: done or declined | empty: nobody was asked
 skill_list=("superpowers|superpowers@superpowers-dev|obra/superpowers|brainstorming" "ponytail|ponytail@ponytail|DietrichGebert/ponytail|ponytail" "caveman|caveman@caveman|JuliusBrussee/caveman|caveman")
 
 skills_step() {
-  local ans item name id repo marker rest installed="" ok=0 ok_claude=0 bad=0 have_claude="" have_npx=""
+  local ans item name id repo marker rest hook_status installed="" ok=0 ok_claude=0 bad=0 have_claude="" have_npx=""
   [ -z "$skills_flag" ] && [ -z "$can_ask" ] && return 0   # nobody to ask: the next steps mention it
   if [ "$skills_flag" = no ]; then
     done_line "Skills" "skipped" "install later: see docs/guides/setup.md"; skills_state=handled; return 0
@@ -634,7 +634,7 @@ skills_step() {
   ans="$skills_flag"
   if [ -z "$ans" ]; then
     yesno "Install or update the primary skills (Superpowers, Ponytail, Caveman)?" \
-      "official repos. Skills you already have are only updated" "install later: see docs/guides/setup.md"
+      "official repos. For Codex, also adds a Caveman startup hook to this project" "install later: see docs/guides/setup.md"
     ans="$answer"
   fi
   skills_state=handled
@@ -670,6 +670,17 @@ skills_step() {
       name="${item%%|*}"; rest="${item#*|}"; rest="${rest#*|}"; repo="${rest%%|*}"
       if run_step "Installing $name for Codex" npx --yes skills add "$repo" --skill '*' --agent codex --global -y; then
         done_line "$name" "installed or updated" "Codex skills $SEP $repo"; ok=$((ok + 1))
+        if [ "$name" = caveman ] && [ -f "$kit_root/scripts/caveman-hook.cjs" ]; then
+          if hook_status="$(node "$kit_root/scripts/caveman-hook.cjs" "$target")"; then
+            if [ "$hook_status" = merge ]; then
+              done_line "Caveman startup" "merge needed" "add the hook from .codex/hooks.json.kit-new, then trust it in Codex /hooks"
+            else
+              done_line "Caveman startup" "configured" "review and trust the project hook in Codex /hooks, then start a new session"
+            fi
+          else
+            done_line "Caveman startup" "setup failed" "check Node.js and .codex/hooks.json, then rerun the installer"
+          fi
+        fi
       else
         done_line "$name" "failed" "run: npx skills add $repo --agent codex"; bad=$((bad + 1))
       fi

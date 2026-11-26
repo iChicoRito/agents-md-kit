@@ -477,7 +477,7 @@ function Invoke-SkillsStep {
     if ($Skills -eq "no") { Write-Done "Skills" "skipped" $later; return "handled" }
     $yes = ($Skills -eq "yes")
     if (-not $Skills) {
-        $yes = Read-YesNo "Install or update the primary skills (Superpowers, Ponytail, Caveman)?" "official repos. Skills you already have are only updated" $later
+        $yes = Read-YesNo "Install or update the primary skills (Superpowers, Ponytail, Caveman)?" "official repos. For Codex, also adds a Caveman startup hook to this project" $later
     }
     if (-not $yes) { Write-Done "Skills" "skipped" $later; return "handled" }
     $haveClaude = ($For -ne "agents") -and [bool](Get-Command claude -ErrorAction SilentlyContinue)
@@ -507,7 +507,23 @@ function Invoke-SkillsStep {
     if ($haveNpx) {
         foreach ($sk in $skillList) {
             $r = Invoke-Spinner "Installing $($sk.Name) for Codex" "npx" @("--yes", "skills", "add", $sk.Repo, "--skill", "*", "--agent", "codex", "--global", "-y") $Target
-            if ($r.Ok) { Write-Done $sk.Name "installed or updated" "Codex skills $SEP $($sk.Repo)"; $ok++ } else { Write-Done $sk.Name "failed" "run: npx skills add $($sk.Repo) --agent codex"; $last = $r }
+            if ($r.Ok) {
+                Write-Done $sk.Name "installed or updated" "Codex skills $SEP $($sk.Repo)"; $ok++
+                $hookSetup = Join-Path $script:kitRoot "scripts/caveman-hook.cjs"
+                if ($sk.Name -eq "caveman" -and (Test-Path -LiteralPath $hookSetup)) {
+                    if (Get-Command node -ErrorAction SilentlyContinue) {
+                        $hookStatus = & node $hookSetup $Target
+                        $hookConfigured = $LASTEXITCODE -eq 0
+                    } else { $hookConfigured = $false }
+                    if ($hookConfigured -and $hookStatus -eq "merge") {
+                        Write-Done "Caveman startup" "merge needed" "add the hook from .codex/hooks.json.kit-new, then trust it in Codex /hooks"
+                    } elseif ($hookConfigured) {
+                        Write-Done "Caveman startup" "configured" "review and trust the project hook in Codex /hooks, then start a new session"
+                    } else {
+                        Write-Done "Caveman startup" "setup failed" "check Node.js and .codex/hooks.json, then rerun the installer"
+                    }
+                }
+            } else { Write-Done $sk.Name "failed" "run: npx skills add $($sk.Repo) --agent codex"; $last = $r }
         }
     }
     $script:barTotal = 0

@@ -150,6 +150,25 @@ check "bad --graphify value fails" "! install --graphify maybe '$work'"
 
 # graph view: an interactive, Obsidian-style graph.html built from graphify-out/graph.json
 
+echo "== Caveman startup"
+mkdir -p "$work/caveman" "$work/existing-hooks/.codex" "$work/no-caveman"
+printf '%s\n' '{"hooks":{"SessionStart":[{"matcher":"resume","hooks":[{"type":"command","command":"echo existing"}]}]}}' > "$work/original-hooks.json"
+cp "$work/original-hooks.json" "$work/existing-hooks/.codex/hooks.json"
+printf '#!/usr/bin/env bash\nexit 0\n' > "$stubs/have/npx"
+chmod +x "$stubs/have/npx"
+check "skills yes: adds Caveman startup once" \
+  'PATH="$stubs/have:$PATH" install --for agents --project new --skills yes "$work/caveman" &&
+   PATH="$stubs/have:$PATH" install --for agents --project new --skills yes "$work/caveman" &&
+   [ "$(grep -c "Starting Caveman mode" "$work/caveman/.codex/hooks.json")" = 1 ] &&
+   [ ! -e "$work/caveman/.codex/hooks.json.kit-new" ]'
+check "skills yes: proposes a merge when a hooks file exists" \
+  'PATH="$stubs/have:$PATH" install --for agents --project new --skills yes "$work/existing-hooks" &&
+   cmp -s "$work/original-hooks.json" "$work/existing-hooks/.codex/hooks.json" &&
+   cmp -s "$work/caveman/.codex/hooks.json" "$work/existing-hooks/.codex/hooks.json.kit-new"'
+check "skills no: skips the Caveman hook" \
+  'PATH="$stubs/have:$PATH" install --for agents --project new --skills no "$work/no-caveman" &&
+   [ ! -e "$work/no-caveman/.codex/hooks.json" ]'
+
 # Bad input is refused
 echo "== errors"
 check "unknown --for value fails" "! install --for nope '$work'"
