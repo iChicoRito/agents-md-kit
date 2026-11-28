@@ -706,7 +706,7 @@ skills_state=""   # handled: done or declined | empty: nobody was asked
 skill_list=("superpowers|superpowers@superpowers-dev|obra/superpowers|brainstorming" "ponytail|ponytail@ponytail|DietrichGebert/ponytail|ponytail" "caveman|caveman@caveman|JuliusBrussee/caveman|caveman" "unslop|unslop@heydamir|heydamir/unslop|unslop")
 
 skills_step() {
-  local ans item name id repo marker rest hook_status installed="" ok=0 ok_claude=0 bad=0 have_claude="" have_npx="" picks=() chosen=() opts=() k v
+  local item name id repo marker rest hook_status installed="" ok=0 ok_claude=0 bad=0 have_claude="" have_npx="" chosen=() opts=() k v
   [ -z "$skills_flag" ] && [ -z "$can_ask" ] && return 0   # nobody to ask: the next steps mention it
   if [ "$skills_flag" = no ]; then
     done_line "Skills" "skipped" "install later: see docs/guides/setup.md"; skills_state=handled; return 0
