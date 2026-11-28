@@ -47,7 +47,7 @@ These stay on your computer and are never shared. It also leaves out `*.kit-new`
 **`.claude/settings.json`: Claude Code settings**
 It does three things:
 1. Stops Claude from adding its name to your commits.
-2. Lists six plugins: Superpowers, Ponytail, Caveman, mattpocock-skills, ux-ui-agent-skills and unslop-ui. Anyone who opens the project in Claude Code is offered an install.
+2. Lists five plugins: Superpowers, Ponytail, Caveman, mattpocock-skills and unslop-ui. Anyone who opens the project in Claude Code is offered an install.
 3. Turns on the line checker below.
 
 **`.claude/hooks/check-claude-md.js`: the line checker**

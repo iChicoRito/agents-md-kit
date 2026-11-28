@@ -84,7 +84,7 @@ usage() {
     --graphify yes|no     graphify, the code knowledge graph: yes = install it if missing and
                           build the graph without asking, no = skip it (default: ask)
 
-    --skills yes|no       primary skills (Superpowers, Ponytail, Caveman, official repos):
+    --skills yes|no       primary skills (Superpowers, Ponytail, Caveman, unslop, official repos):
                           yes = install them, or update those already installed, without
                           asking; no = skip (default: ask)
 
@@ -617,13 +617,13 @@ graphify_step() {
 }
 if [ -z "$dry" ]; then graphify_step; fi
 
-# ---------- primary skills (optional): Superpowers, Ponytail, Caveman from their official repos ----------
+# ---------- primary skills (optional): Superpowers, Ponytail, Caveman, unslop from their official repos ----------
 # Asks first (default No). Claude Code gets the plugins (they bring the automatic modes): installed with
 # claude plugin install, or only updated when already installed. Codex gets the plain skills (npx skills add,
 # which fetches the latest). A skill that is already in ~/.claude/skills is not installed again as a plugin.
 skills_state=""   # handled: done or declined | empty: nobody was asked
 # name | plugin id | official repo | a skill the plugin contains (to spot a copy installed the other way)
-skill_list=("superpowers|superpowers@superpowers-dev|obra/superpowers|brainstorming" "ponytail|ponytail@ponytail|DietrichGebert/ponytail|ponytail" "caveman|caveman@caveman|JuliusBrussee/caveman|caveman")
+skill_list=("superpowers|superpowers@superpowers-dev|obra/superpowers|brainstorming" "ponytail|ponytail@ponytail|DietrichGebert/ponytail|ponytail" "caveman|caveman@caveman|JuliusBrussee/caveman|caveman" "unslop|unslop@heydamir|heydamir/unslop|unslop")
 
 skills_step() {
   local ans item name id repo marker rest hook_status installed="" ok=0 ok_claude=0 bad=0 have_claude="" have_npx=""
@@ -633,7 +633,7 @@ skills_step() {
   fi
   ans="$skills_flag"
   if [ -z "$ans" ]; then
-    yesno "Install or update the primary skills (Superpowers, Ponytail, Caveman)?" \
+    yesno "Install or update the primary skills (Superpowers, Ponytail, Caveman, unslop)?" \
       "official repos. For Codex, also adds a Caveman startup hook to this project" "install later: see docs/guides/setup.md"
     ans="$answer"
   fi

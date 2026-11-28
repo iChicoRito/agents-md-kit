@@ -28,6 +28,7 @@ Skills in `.agents/skills/`. None yet. Add a row for each new one.
 | Question about how the code works or how parts connect (needs a graph, see `graphify.md`) | `graphify` |
 | Design, redesign, or polish any UI | `impeccable` |
 | UI choices: style, color, fonts, layout | `ui-ux-pro-max` |
+| Clean up AI-looking UI (purple gradients, glows, emoji labels, uneven spacing) | `unslop` |
 | Commit message (only when the user asks to commit) | `caveman-commit` |
 | Write or edit instruction or rule files | `writing-for-agents` |
 

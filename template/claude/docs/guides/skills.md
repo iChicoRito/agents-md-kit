@@ -2,7 +2,7 @@
 
 The full list. The main rows are also in `.claude/rules/skills-and-plugins.md`, which loads every session. Read this file when no main row fits the task.
 
-Plugins listed in `.claude/settings.json` (Superpowers, Ponytail, Caveman, mattpocock-skills, ux-ui-agent-skills, unslop-ui): Claude Code offers to install them when the project opens. The Caveman skills and the design skills (`impeccable`, `ui-ux-pro-max`, `design-taste-frontend`) must be installed by hand. See `setup.md`.
+Plugins listed in `.claude/settings.json` (Superpowers, Ponytail, Caveman, mattpocock-skills, unslop-ui): Claude Code offers to install them when the project opens. The Caveman skills and the design skills (`impeccable`, `ui-ux-pro-max`, `design-taste-frontend`) must be installed by hand. See `setup.md`.
 
 ## Planning and building
 
@@ -50,7 +50,6 @@ Plugins listed in `.claude/settings.json` (Superpowers, Ponytail, Caveman, mattp
 | UI/UX choices: style, color, fonts, layout, accessibility, charts | `ui-ux-pro-max` |
 | Websites and landing pages that must not look generic or AI-made | `design-taste-frontend` |
 | Remove AI-looking copy and visual clutter from a UI (user runs it; needs `pstack`) | `/unslop-ui` |
-| Harsh design review of a finished screen, after checks pass | agent `ux-ui-agent-skills:design-critic` |
 
 ## Writing and communication
 

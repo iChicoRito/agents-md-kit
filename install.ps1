@@ -108,7 +108,7 @@ if ($Help) {
     Write-Host "    -Graphify yes|no     graphify, the code knowledge graph: yes = install it if missing"
     Write-Host "                         and build the graph without asking, no = skip it (default: ask)"
     Write-Host ""
-    Write-Host "    -Skills yes|no       primary skills (Superpowers, Ponytail, Caveman, official repos):"
+    Write-Host "    -Skills yes|no       primary skills (Superpowers, Ponytail, Caveman, unslop, official repos):"
     Write-Host "                         yes = install them, or update those already installed, without"
     Write-Host "                         asking; no = skip (default: ask)"
     Write-Host ""
@@ -460,7 +460,7 @@ function Invoke-GraphifyStep {
     return "handled"
 }
 
-# ---------- primary skills (optional): Superpowers, Ponytail, Caveman from their official repos ----------
+# ---------- primary skills (optional): Superpowers, Ponytail, Caveman, unslop from their official repos ----------
 # Asks first (default No). Claude Code gets the plugins (they bring the automatic modes): installed with
 # claude plugin install, or only updated when already installed. Codex gets the plain skills (npx skills add,
 # which fetches the latest). A skill that is already in ~/.claude/skills is not installed again as a plugin.
@@ -469,7 +469,8 @@ function Invoke-GraphifyStep {
 $skillList = @(
     @{ Name = "superpowers"; Id = "superpowers@superpowers-dev"; Repo = "obra/superpowers"; Marker = "brainstorming" },
     @{ Name = "ponytail"; Id = "ponytail@ponytail"; Repo = "DietrichGebert/ponytail"; Marker = "ponytail" },
-    @{ Name = "caveman"; Id = "caveman@caveman"; Repo = "JuliusBrussee/caveman"; Marker = "caveman" }
+    @{ Name = "caveman"; Id = "caveman@caveman"; Repo = "JuliusBrussee/caveman"; Marker = "caveman" },
+    @{ Name = "unslop"; Id = "unslop@heydamir"; Repo = "heydamir/unslop"; Marker = "unslop" }
 )
 function Invoke-SkillsStep {
     if (-not $Skills -and -not $canAsk) { return "" }   # nobody to ask: the next steps mention it
@@ -477,7 +478,7 @@ function Invoke-SkillsStep {
     if ($Skills -eq "no") { Write-Done "Skills" "skipped" $later; return "handled" }
     $yes = ($Skills -eq "yes")
     if (-not $Skills) {
-        $yes = Read-YesNo "Install or update the primary skills (Superpowers, Ponytail, Caveman)?" "official repos. For Codex, also adds a Caveman startup hook to this project" $later
+        $yes = Read-YesNo "Install or update the primary skills (Superpowers, Ponytail, Caveman, unslop)?" "official repos. For Codex, also adds a Caveman startup hook to this project" $later
     }
     if (-not $yes) { Write-Done "Skills" "skipped" $later; return "handled" }
     $haveClaude = ($For -ne "agents") -and [bool](Get-Command claude -ErrorAction SilentlyContinue)
