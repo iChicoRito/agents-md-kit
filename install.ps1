@@ -108,9 +108,10 @@ if ($Help) {
     Write-Host "    -Graphify yes|no     graphify, the code knowledge graph: yes = install it if missing"
     Write-Host "                         and build the graph without asking, no = skip it (default: ask)"
     Write-Host ""
-    Write-Host "    -Skills yes|no       primary skills (Superpowers, Ponytail, Caveman, unslop, official repos):"
-    Write-Host "                         yes = install them, or update those already installed, without"
-    Write-Host "                         asking; no = skip (default: ask)"
+    Write-Host "    -Skills yes|no|list  primary skills (Superpowers, Ponytail, Caveman, unslop, official repos):"
+    Write-Host "                         yes = install all, or update those already installed, without"
+    Write-Host "                         asking; no = skip; or a comma list, e.g. caveman,unslop"
+    Write-Host "                         (default: ask, with a checkbox list)"
     Write-Host ""
     Write-Part "  Options you leave out are asked. Target folder: current folder if not given." Dim -End
     Write-Host ""
@@ -141,7 +142,12 @@ if ($For -and $For -notin @("claude", "agents", "both")) { Write-Fail "Unknown -
 if ($Project -and $Project -notin @("new", "existing")) { Write-Fail "Unknown -Project value: $Project (use new or existing)"; return }
 if ($Prompt -and $Prompt -notin @("yes", "no")) { Write-Fail "Unknown -Prompt value: $Prompt (use yes or no)"; return }
 if ($Graphify -and $Graphify -notin @("yes", "no")) { Write-Fail "Unknown -Graphify value: $Graphify (use yes or no)"; return }
-if ($Skills -and $Skills -notin @("yes", "no")) { Write-Fail "Unknown -Skills value: $Skills (use yes or no)"; return }
+$skillNames = @("superpowers", "ponytail", "caveman", "unslop")
+if ($Skills -and $Skills -notin @("yes", "no")) {
+    foreach ($v in ($Skills -split ",")) {
+        if ($v.Trim() -notin $skillNames) { Write-Fail "Unknown -Skills value: $Skills (use yes, no, or a list of: $($skillNames -join ', '))"; return }
+    }
+}
 # A pinned version downloads that release; "1.0.0" and "v1.0.0" both work.
 $Version = $Version -replace '^v', ''
 if ($Version) {
@@ -299,6 +305,60 @@ function Select-Option([string]$Question, [int]$Default, [string[]]$Options) {
     # Erase question and menu (blank, question, blank, n options, blank, hint).
     Write-Host "$E[$($n + 5)A$E[J" -NoNewline
     return $sel
+}
+
+# Checkbox list of "Label|hint" options, nothing checked at the start. Returns the checked 1-based numbers.
+function Select-Many([string]$Question, [string[]]$Options) {
+    $n = $Options.Count
+    Write-Host ""; Write-Part "  $Question" Bold -End; Write-Host ""
+    if (-not $menus) {
+        for ($i = 0; $i -lt $n; $i++) {
+            $lab, $hint = $Options[$i] -split '\|', 2
+            Write-Part ("    {0}" -f ($i + 1)) Accent; Write-Part ("  {0} " -f $lab.PadRight(24)); Write-Part $hint Dim -End
+        }
+        Write-Host ""
+        for ($t = 0; $t -lt 3; $t++) {
+            try { $a = Read-Host "  Type numbers separated by commas, 'all', or Enter for none" } catch { return @() }
+            $a = "$a".Trim().ToLower() -replace '\s', ''
+            if (-not $a -or $a -eq "none") { return @() }
+            if ($a -eq "all") { return @(1..$n) }
+            $nums = @($a -split ",")
+            if (-not ($nums | Where-Object { $_ -notmatch '^\d+$' -or [int]$_ -lt 1 -or [int]$_ -gt $n })) { return @($nums | ForEach-Object { [int]$_ } | Sort-Object -Unique) }
+            Write-Part "  Please type numbers from 1 to $n." Yellow -End
+        }
+        Write-Part "  No valid answer, installing none." Yellow -End
+        return @()
+    }
+    $sel = 1
+    $on = New-Object bool[] $n
+    $draw = {
+        for ($i = 0; $i -lt $n; $i++) {
+            $lab, $hint = $Options[$i] -split '\|', 2
+            $box = if ($on[$i]) { "[x]" } else { "[ ]" }
+            Write-Host "$E[2K" -NoNewline
+            if ($i + 1 -eq $sel) { Write-Part ("  {0} {1} {2}" -f $PTR, $box, $lab.PadRight(24)) Accent }
+            else { Write-Part ("    {0} {1}" -f $box, $lab.PadRight(24)) }
+            Write-Part " $hint" Dim -End
+        }
+        Write-Host "$E[2K"
+        Write-Host "$E[2K" -NoNewline; Write-Part "  $UP/$DN move $SEP Space check $SEP a all $SEP Enter confirm $SEP Ctrl+C quit" Dim -End
+    }
+    try { [Console]::CursorVisible = $false } catch {}
+    try {
+        & $draw
+        while ($true) {
+            $k = [Console]::ReadKey($true)
+            if ($k.Key -eq 'Enter') { break }
+            if ($k.Key -eq 'UpArrow' -or $k.KeyChar -eq 'k') { if ($sel -gt 1) { $sel-- } }
+            elseif ($k.Key -eq 'DownArrow' -or $k.KeyChar -eq 'j') { if ($sel -lt $n) { $sel++ } }
+            elseif ($k.Key -eq 'Spacebar') { $on[$sel - 1] = -not $on[$sel - 1] }
+            elseif ($k.KeyChar -eq 'a') { $v = [bool]($on -contains $false); for ($i = 0; $i -lt $n; $i++) { $on[$i] = $v } }
+            Write-Host "$E[$($n + 2)A" -NoNewline
+            & $draw
+        }
+    } finally { try { [Console]::CursorVisible = $true } catch {} }
+    Write-Host "$E[$($n + 5)A$E[J" -NoNewline
+    return @(1..$n | Where-Object { $on[$_ - 1] })
 }
 
 # ---------- welcome ----------
@@ -476,11 +536,20 @@ function Invoke-SkillsStep {
     if (-not $Skills -and -not $canAsk) { return "" }   # nobody to ask: the next steps mention it
     $later = "install later: see docs/guides/setup.md"
     if ($Skills -eq "no") { Write-Done "Skills" "skipped" $later; return "handled" }
-    $yes = ($Skills -eq "yes")
-    if (-not $Skills) {
-        $yes = Read-YesNo "Install or update the primary skills (Superpowers, Ponytail, Caveman, unslop)?" "official repos. For Codex, also adds a Caveman startup hook to this project" $later
+    $labels = @{
+        superpowers = "Superpowers|plans, TDD, debugging workflows"
+        ponytail = "Ponytail|smallest change that fully solves the task"
+        caveman = "Caveman|short replies; Codex also gets a startup hook here"
+        unslop = "unslop|fix AI-looking UI"
     }
-    if (-not $yes) { Write-Done "Skills" "skipped" $later; return "handled" }
+    if ($Skills -eq "yes") { $chosen = @($skillList) }
+    elseif ($Skills) { $want = @($Skills -split "," | ForEach-Object { $_.Trim() }); $chosen = @($skillList | Where-Object { $_.Name -in $want }) }
+    else {
+        $picked = @(Select-Many "Which skills do you want to install or update?" @($skillList | ForEach-Object { $labels[$_.Name] }))
+        $chosen = @($picked | ForEach-Object { $skillList[$_ - 1] })
+    }
+    if ($chosen.Count -eq 0) { Write-Done "Skills" "skipped" $later; return "handled" }
+    $skillList = $chosen
     $haveClaude = ($For -ne "agents") -and [bool](Get-Command claude -ErrorAction SilentlyContinue)
     $haveNpx = ($For -ne "claude") -and [bool](Get-Command npx -ErrorAction SilentlyContinue)
     if ($For -ne "agents" -and -not $haveClaude) { Write-Done "Claude Code" "skipped" "the claude command was not found. See docs/guides/setup.md" }

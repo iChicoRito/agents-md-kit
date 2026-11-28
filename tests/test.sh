@@ -168,6 +168,11 @@ check "skills yes: proposes a merge when a hooks file exists" \
 check "skills no: skips the Caveman hook" \
   'PATH="$stubs/have:$PATH" install --for agents --project new --skills no "$work/no-caveman" &&
    [ ! -e "$work/no-caveman/.codex/hooks.json" ]'
+check "skills list without caveman: no Caveman hook"   'mkdir -p "$work/pick" && PATH="$stubs/have:$PATH" install --for agents --project new --skills unslop,ponytail "$work/pick" &&
+   [ ! -e "$work/pick/.codex/hooks.json" ]'
+check "skills list with caveman: adds the hook"   'mkdir -p "$work/pick2" && PATH="$stubs/have:$PATH" install --for agents --project new --skills unslop,caveman "$work/pick2" &&
+   grep -q "Starting Caveman mode" "$work/pick2/.codex/hooks.json"'
+check "bad --skills value fails" "! install --skills nope '$work'"
 
 # Bad input is refused
 echo "== errors"

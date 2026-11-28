@@ -84,9 +84,10 @@ usage() {
     --graphify yes|no     graphify, the code knowledge graph: yes = install it if missing and
                           build the graph without asking, no = skip it (default: ask)
 
-    --skills yes|no       primary skills (Superpowers, Ponytail, Caveman, unslop, official repos):
-                          yes = install them, or update those already installed, without
-                          asking; no = skip (default: ask)
+    --skills yes|no|list  primary skills (Superpowers, Ponytail, Caveman, unslop, official repos):
+                          yes = install all, or update those already installed, without
+                          asking; no = skip; or a comma list, e.g. caveman,unslop
+                          (default: ask, with a checkbox list)
 
   ${D}Options you leave out are asked. Target folder: current folder if not given.${N}
 
@@ -188,7 +189,12 @@ case "$choice" in ""|claude|agents|both) ;; *) fail "Unknown --for value: $choic
 case "$project" in ""|new|existing) ;; *) fail "Unknown --project value: $project (use new or existing)" ;; esac
 case "$prompt" in ""|yes|no) ;; *) fail "Unknown --prompt value: $prompt (use yes or no)" ;; esac
 case "$gfy_flag" in ""|yes|no) ;; *) fail "Unknown --graphify value: $gfy_flag (use yes or no)" ;; esac
-case "$skills_flag" in ""|yes|no) ;; *) fail "Unknown --skills value: $skills_flag (use yes or no)" ;; esac
+skills_names="superpowers ponytail caveman unslop"
+case "$skills_flag" in ""|yes|no) ;; *)
+  for v in $(printf '%s' "$skills_flag" | tr ',' ' '); do
+    case " $skills_names " in *" $v "*) ;; *) fail "Unknown --skills value: $skills_flag (use yes, no, or a list of: ${skills_names// /, })" ;; esac
+  done ;;
+esac
 # A pinned version downloads that release; "1.0.0" and "v1.0.0" both work.
 want_version="${want_version#v}"
 if [ -n "$want_version" ]; then
@@ -317,6 +323,80 @@ choose() {
   printf '\033[%dA\033[J' $((n + 5))
   printf '\033[?25h'
   answer="$sel"
+}
+
+# multi "<question>" "label|hint"...
+# Checkbox list, nothing checked at the start. Sets $picked to the checked 1-based numbers (space separated).
+multi() {
+  local question="$1"; shift
+  local opts=("$@") n=$# i key lab hint sel=1 box v
+  local on=()
+  for ((i = 0; i < n; i++)); do on[i]=0; done
+  picked=""
+  if [ -z "$menus" ]; then
+    say ""; say "  ${B}$question${N}"; say ""
+    for ((i = 0; i < n; i++)); do
+      lab="${opts[i]%%|*}"; hint="${opts[i]#*|}"
+      printf '    %s%d%s  %-24s %s%s%s
+' "$A" $((i + 1)) "$N" "$lab" "$D" "$hint" "$N"
+    done
+    say ""
+    local a tries=0 ok v
+    while :; do
+      printf '  Type numbers separated by commas, "all", or Enter for none: '; a=""
+      read -r a <&3 || { say ""; return; }
+      a="$(echo "$a" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+      [ -z "$a" ] || [ "$a" = none ] && return
+      if [ "$a" = all ]; then picked="$(seq 1 "$n" | tr '
+' ' ')"; return; fi
+      ok=1
+      for v in $(echo "$a" | tr ',' ' '); do
+        case "$v" in ''|*[!0-9]*) ok="" ;; *) { [ "$v" -ge 1 ] && [ "$v" -le "$n" ]; } || ok="" ;; esac
+      done
+      if [ -n "$ok" ]; then picked="$(echo "$a" | tr ',' ' ')"; return; fi
+      tries=$((tries + 1))
+      if [ $tries -ge 3 ]; then say "  ${Y}No valid answer, installing none.${N}"; return; fi
+      say "  ${Y}Please type numbers from 1 to $n.${N}"
+    done
+  fi
+  draw() {
+    for ((i = 0; i < n; i++)); do
+      lab="${opts[i]%%|*}"; hint="${opts[i]#*|}"
+      if [ "${on[i]}" = 1 ]; then box="[x]"; else box="[ ]"; fi
+      if [ $((i + 1)) -eq "$sel" ]; then
+        printf '[2K  %s%s %s %-24s%s %s%s%s
+' "$A" "$PTR" "$box" "$lab" "$N" "$D" "$hint" "$N"
+      else
+        printf '[2K    %s %-24s %s%s%s
+' "$box" "$lab" "$D" "$hint" "$N"
+      fi
+    done
+    printf '[2K
+[2K  %s%s/%s move %s Space check %s a all %s Enter confirm %s Ctrl+C quit%s
+'       "$D" "$UP" "$DN" "$SEP" "$SEP" "$SEP" "$SEP" "$N"
+  }
+  printf '[?25l'
+  say ""; say "  ${B}$question${N}"; say ""
+  draw
+  stty -echo -icanon min 1 time 0 <&3
+  while :; do
+    key="$(dd bs=8 count=1 2>/dev/null <&3; printf x)"; key="${key%x}"
+    case "$key" in
+      $'[A'|$'OA'|k) [ "$sel" -gt 1 ] && sel=$((sel - 1)) ;;
+      $'[B'|$'OB'|j) [ "$sel" -lt "$n" ] && sel=$((sel + 1)) ;;
+      ' ') on[sel-1]=$((1 - on[sel-1])) ;;
+      a|A) v=1; for ((i = 0; i < n; i++)); do [ "${on[i]}" = 1 ] || { v=0; break; }; done
+           for ((i = 0; i < n; i++)); do on[i]=$((1 - v)); done ;;
+      ''|$''|$'
+') break ;;
+    esac
+    printf '[%dA' $((n + 2)); draw
+  done
+  stty "$old_stty" <&3
+  printf '[%dA[J' $((n + 5))
+  printf '[?25h'
+  for ((i = 0; i < n; i++)); do [ "${on[i]}" = 1 ] && picked="$picked$((i + 1)) "; done
+  return 0
 }
 
 # ask "<prompt>" <default> <valid answers...>; result in $answer (typed fallback)
@@ -626,21 +706,35 @@ skills_state=""   # handled: done or declined | empty: nobody was asked
 skill_list=("superpowers|superpowers@superpowers-dev|obra/superpowers|brainstorming" "ponytail|ponytail@ponytail|DietrichGebert/ponytail|ponytail" "caveman|caveman@caveman|JuliusBrussee/caveman|caveman" "unslop|unslop@heydamir|heydamir/unslop|unslop")
 
 skills_step() {
-  local ans item name id repo marker rest hook_status installed="" ok=0 ok_claude=0 bad=0 have_claude="" have_npx=""
+  local ans item name id repo marker rest hook_status installed="" ok=0 ok_claude=0 bad=0 have_claude="" have_npx="" picks=() chosen=() opts=() k v
   [ -z "$skills_flag" ] && [ -z "$can_ask" ] && return 0   # nobody to ask: the next steps mention it
   if [ "$skills_flag" = no ]; then
     done_line "Skills" "skipped" "install later: see docs/guides/setup.md"; skills_state=handled; return 0
   fi
-  ans="$skills_flag"
-  if [ -z "$ans" ]; then
-    yesno "Install or update the primary skills (Superpowers, Ponytail, Caveman, unslop)?" \
-      "official repos. For Codex, also adds a Caveman startup hook to this project" "install later: see docs/guides/setup.md"
-    ans="$answer"
-  fi
   skills_state=handled
-  if [ "$ans" != yes ]; then
+  case "$skills_flag" in
+    yes) chosen=("${skill_list[@]}") ;;
+    "")
+      for item in "${skill_list[@]}"; do
+        case "${item%%|*}" in
+          superpowers) opts+=("Superpowers|plans, TDD, debugging workflows") ;;
+          ponytail) opts+=("Ponytail|smallest change that fully solves the task") ;;
+          caveman) opts+=("Caveman|short replies; Codex also gets a startup hook here") ;;
+          unslop) opts+=("unslop|fix AI-looking UI") ;;
+        esac
+      done
+      multi "Which skills do you want to install or update?" "${opts[@]}"
+      for k in $picked; do chosen+=("${skill_list[k-1]}"); done ;;
+    *)
+      for item in "${skill_list[@]}"; do
+        name="${item%%|*}"
+        for v in $(printf '%s' "$skills_flag" | tr ',' ' '); do if [ "$v" = "$name" ]; then chosen+=("$item"); fi; done
+      done ;;
+  esac
+  if [ ${#chosen[@]} -eq 0 ]; then
     done_line "Skills" "skipped" "install later: see docs/guides/setup.md"; return 0
   fi
+  skill_list=("${chosen[@]}")
   [ "$choice" != agents ] && command -v claude >/dev/null 2>&1 && have_claude=1
   [ "$choice" != claude ] && command -v npx >/dev/null 2>&1 && have_npx=1
   [ "$choice" != agents ] && [ -z "$have_claude" ] && done_line "Claude Code" "skipped" "the claude command was not found. See docs/guides/setup.md"
